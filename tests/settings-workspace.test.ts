@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveDisplayLayers } from "../src/config.js";
 import { createSettingsWorkspace } from "../src/settings-workspace.js";
 import {
-	DEFAULT_CONFIG,
 	type AtelierConfig,
+	DEFAULT_CONFIG,
 	type DisplayLayerState,
 	type DisplayPatch,
 } from "../src/types.js";
@@ -242,7 +242,8 @@ describe("Display Settings Workspace", () => {
 		expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
 		expect(previewStart).toBeGreaterThan(0);
 		expect(lines[previewStart + 1]).toContain("CRAFTING");
-		expect(lines[previewStart + 2]).toContain("└");
+		expect(lines[previewStart + 2]).toContain("SYNC");
+		expect(lines[previewStart + 3]).toContain("└");
 		expect(lines.join("\n")).not.toContain("brand        ATELIER");
 	});
 
