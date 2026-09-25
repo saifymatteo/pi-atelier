@@ -8,7 +8,7 @@ import {
 	TEMPLATE_NAMES,
 	toggleSegmentVisibility,
 } from "./display.js";
-import { renderFooterLine } from "./footer.js";
+import { renderFooterLine, renderFooterLines } from "./footer.js";
 import type { ThemeLike } from "./palette.js";
 import { DEFAULT_SIDEBAR_PANEL_LAYOUT } from "./sidebar-panels.js";
 import { errorMessage, fitToWidth } from "./text.js";
@@ -467,15 +467,15 @@ export function createSettingsWorkspace(options: SettingsWorkspaceOptions): Sett
 			{ line: "" },
 			actionLine("sidebar-default", "Restore default"),
 		];
-		const previewLine = renderFooterLine(
+		const previewLines = renderFooterLines(
 			representativeState,
 			{ ...options.getRenderConfig(), ...cloneDisplay(display) },
 			theme,
 			Math.max(1, outerInner - 6),
 			{ colorEnabled: options.colorEnabled ?? true },
-		);
+		).map((line) => `  ${line}`);
 		const preview = [
-			...panel("Preview", [{ line: `  ${previewLine}` }], outerInner, theme, true),
+			...panel("Preview", previewLines.map((line) => ({ line })), outerInner, theme, true),
 			{ line: "" },
 			...panel(
 				"Sidebar Preview",
