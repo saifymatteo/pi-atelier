@@ -185,6 +185,6 @@ Development stays on Pi 0.84.0 to check the minimum supported API. A scoped npm 
 
 ## Fork change: status rows
 
-This fork renders extension statuses on dedicated rows beneath the status rail instead of inline in it. Statuses wrap as whole items, oversized statuses truncate with an ellipsis, and the rail row keeps upstream behavior.
+This fork renders extension statuses on dedicated rows beneath the status rail instead of inline in it. Statuses wrap as whole items, joined by the rail's dim separator, oversized statuses truncate with an ellipsis, and the rail row keeps upstream behavior.
 
 [MIT](https://github.com/michaelmjhhhh/pi-atelier/blob/main/LICENSE)
