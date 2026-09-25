@@ -401,12 +401,17 @@ function compose(
 }
 
 /** Pack whole statuses left-to-right, wrapping to a fresh row when the next status does not fit. */
-function statusRows(parts: readonly string[], width: number, palette: AtelierPalette): string[] {
+function statusRows(
+	parts: readonly string[],
+	width: number,
+	palette: AtelierPalette,
+	separator: string,
+): string[] {
 	const rows: string[] = [];
 	let current = "";
 	for (const part of parts) {
 		const painted = palette.paint("muted", part);
-		const candidate = current ? `${current} ${painted}` : painted;
+		const candidate = current ? `${current}${palette.paint("dim", ` ${separator} `)}${painted}` : painted;
 		if (visibleWidth(candidate) <= width) {
 			current = candidate;
 			continue;
@@ -476,7 +481,12 @@ function renderFooter(
 		const railStatus = placed.find((placedItem) => placedItem.id === "status");
 		if (railStatus) {
 			placed = placed.filter((placedItem) => placedItem.id !== "status");
-			statusLines = statusRows(railStatus.statuses ?? [], width, palette);
+			statusLines = statusRows(
+				railStatus.statuses ?? [],
+				width,
+				palette,
+				config.nerdFont ? FOOTER_ICONS.separator : PLAIN_SYMBOLS.separator,
+			);
 		}
 	}
 	const line = compose(placed, width, palette, symbols.separator, surface === "header");
