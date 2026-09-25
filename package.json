@@ -1,5 +1,5 @@
 {
-	"name": "pi-atelier",
+	"name": "@saifymatteo/pi-atelier",
 	"version": "0.11.2",
 	"description": "A responsive status rail and live activity sidebar for Pi",
 	"type": "module",
@@ -20,20 +20,23 @@
 		"CHANGELOG.md",
 		"LICENSE"
 	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"pi": {
 		"extensions": [
 			"./extensions/index.ts"
 		],
-		"image": "https://raw.githubusercontent.com/michaelmjhhhh/pi-atelier/main/assets/preview.png"
+		"image": "https://raw.githubusercontent.com/saifymatteo/pi-atelier/main/assets/preview.png"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/michaelmjhhhh/pi-atelier.git"
+		"url": "git+https://github.com/saifymatteo/pi-atelier.git"
 	},
 	"bugs": {
-		"url": "https://github.com/michaelmjhhhh/pi-atelier/issues"
+		"url": "https://github.com/saifymatteo/pi-atelier/issues"
 	},
-	"homepage": "https://github.com/michaelmjhhhh/pi-atelier#readme",
+	"homepage": "https://github.com/saifymatteo/pi-atelier#readme",
 	"scripts": {
 		"test": "vitest run",
 		"test:watch": "vitest",
