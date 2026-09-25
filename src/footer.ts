@@ -73,6 +73,8 @@ interface FooterItem {
 	id: FooterItemId;
 	full: string;
 	compact: string;
+	/** Individual sanitized statuses behind the joined `full` text; set for the status item. */
+	statuses?: readonly string[];
 }
 
 type FooterSurface = "all" | "header" | "telemetry";
@@ -164,6 +166,11 @@ interface ItemContext {
 
 const item = (id: FooterItemId, full: string, compact = full): FooterItem => ({ id, full, compact });
 
+const statusItem = (statuses: readonly string[], palette: AtelierPalette): FooterItem => ({
+	...item("status", palette.paint("muted", statuses.join(" "))),
+	statuses,
+});
+
 function iconFor(palette: AtelierPalette) {
 	return (symbol: string, text: string, role: PaletteRole = "muted"): string =>
 		symbol ? `${palette.paint(role, symbol)} ${text}` : text;
@@ -213,8 +220,8 @@ const SEGMENT_ITEMS: Record<SegmentId, (context: ItemContext) => FooterItem[]> =
 		return items;
 	},
 	statuses: ({ state, palette }) => {
-		const statuses = state.extensionStatuses.map(sanitizeInline).filter(Boolean).join(" ");
-		return statuses ? [item("status", palette.paint("muted", statuses))] : [];
+		const statuses = state.extensionStatuses.map(sanitizeInline).filter(Boolean);
+		return statuses.length > 0 ? [statusItem(statuses, palette)] : [];
 	},
 	metrics: ({ state: { metrics }, config, palette, symbols }) => {
 		const icon = iconFor(palette);
@@ -393,6 +400,24 @@ function compose(
 	return truncateToWidth([leftText, rightText].filter(Boolean).join("  "), width, "");
 }
 
+/** Pack whole statuses left-to-right, wrapping to a fresh row when the next status does not fit. */
+function statusRows(parts: readonly string[], width: number, palette: AtelierPalette): string[] {
+	const rows: string[] = [];
+	let current = "";
+	for (const part of parts) {
+		const painted = palette.paint("muted", part);
+		const candidate = current ? `${current} ${painted}` : painted;
+		if (visibleWidth(candidate) <= width) {
+			current = candidate;
+			continue;
+		}
+		if (current) rows.push(current);
+		current = visibleWidth(painted) <= width ? painted : truncateToWidth(painted, width, "…");
+	}
+	if (current) rows.push(current);
+	return rows;
+}
+
 export interface FooterRenderOptions {
 	colorEnabled?: boolean;
 	workingDots?: string;
@@ -401,6 +426,8 @@ export interface FooterRenderOptions {
 
 interface RenderedFooter {
 	line: string;
+	/** Sanitized statuses rendered on dedicated rows below the rail (complete surface only). */
+	statusRows: string[];
 	/** Full-width working activity text, when the layout shows it. */
 	workingActivity: string | undefined;
 }
@@ -412,7 +439,7 @@ function renderFooter(
 	width: number,
 	{ colorEnabled = true, workingDots = WORKING_DOT_FRAMES[0], surface = "all" }: FooterRenderOptions,
 ): RenderedFooter {
-	if (width <= 0) return { line: "", workingActivity: undefined };
+	if (width <= 0) return { line: "", statusRows: [], workingActivity: undefined };
 	const palette = createPalette(theme, colorEnabled);
 	const symbols = config.nerdFont ? FOOTER_ICONS : PLAIN_SYMBOLS;
 	const items = buildItems({ state, config, theme, palette, symbols, workingDots });
@@ -420,26 +447,37 @@ function renderFooter(
 		state.activity === "working" && config.density !== "compact"
 			? items.find((footerItem) => footerItem.id === "activity")?.full
 			: undefined;
-	let placed: PlacedItem[];
-	if (surface === "telemetry") {
-		const { metrics } = state;
-		const available: Partial<Record<FooterItemId, boolean>> = {
-			input: metrics.usageAvailable,
-			output: metrics.usageAvailable,
-			cache: metrics.cacheHitPercent !== undefined || (config.preset === "classic" && metrics.usageAvailable),
-			cost: metrics.costAvailable,
-			performance: responsePerformanceValues(state.performance).ttft.available,
-		};
-		placed = items
-			.filter((footerItem) => !ITEM_META[footerItem.id].header && available[footerItem.id] !== false)
-			.map((footerItem) => ({
-				...footerItem,
-				zone: footerItem.id === "performance" || footerItem.id === "menu" ? "right" : "left",
-			}));
-	} else {
-		placed = items
-			.filter((footerItem) => surface === "all" || ITEM_META[footerItem.id].header)
-			.map((footerItem) => ({ ...footerItem, zone: ITEM_META[footerItem.id].zone }));
+	let placed: PlacedItem[] =
+		surface === "telemetry"
+			? (() => {
+					const { metrics } = state;
+					const available: Partial<Record<FooterItemId, boolean>> = {
+						input: metrics.usageAvailable,
+						output: metrics.usageAvailable,
+						cache:
+							metrics.cacheHitPercent !== undefined ||
+							(config.preset === "classic" && metrics.usageAvailable),
+						cost: metrics.costAvailable,
+						performance: responsePerformanceValues(state.performance).ttft.available,
+					};
+					return items
+						.filter((footerItem) => !ITEM_META[footerItem.id].header && available[footerItem.id] !== false)
+						.map((footerItem) => ({
+							...footerItem,
+							zone: footerItem.id === "performance" || footerItem.id === "menu" ? "right" : "left",
+						}));
+			  })()
+			: items
+					.filter((footerItem) => surface === "all" || ITEM_META[footerItem.id].header)
+					.map((footerItem) => ({ ...footerItem, zone: ITEM_META[footerItem.id].zone }));
+	// On the complete surface, statuses leave the rail and occupy their own rows below it.
+	let statusLines: string[] = [];
+	if (surface === "all") {
+		const railStatus = placed.find((placedItem) => placedItem.id === "status");
+		if (railStatus) {
+			placed = placed.filter((placedItem) => placedItem.id !== "status");
+			statusLines = statusRows(railStatus.statuses ?? [], width, palette);
+		}
 	}
 	const line = compose(placed, width, palette, symbols.separator, surface === "header");
 	if (
@@ -447,9 +485,13 @@ function renderFooter(
 		placed.length > 0 &&
 		placed.every((footerItem) => footerItem.zone === "right")
 	) {
-		return { line: `${" ".repeat(Math.max(0, width - visibleWidth(line)))}${line}`, workingActivity };
+		return {
+			line: `${" ".repeat(Math.max(0, width - visibleWidth(line)))}${line}`,
+			statusRows: statusLines,
+			workingActivity,
+		};
 	}
-	return { line: truncateToWidth(line, width, ""), workingActivity };
+	return { line: truncateToWidth(line, width, ""), statusRows: statusLines, workingActivity };
 }
 
 export function renderFooterLine(
@@ -460,6 +502,18 @@ export function renderFooterLine(
 	options: FooterRenderOptions = {},
 ): string {
 	return renderFooter(state, config, theme, width, options).line;
+}
+
+/** Footer rows for a surface: the rail row, plus the wrapped status rows on the complete surface. */
+export function renderFooterLines(
+	state: FooterState,
+	config: AtelierConfig,
+	theme: ThemeLike,
+	width: number,
+	options: FooterRenderOptions = {},
+): string[] {
+	const { line, statusRows: rows } = renderFooter(state, config, theme, width, options);
+	return rows.length === 0 ? [line] : [line, ...rows];
 }
 
 export interface FooterComponentOptions {
@@ -504,8 +558,8 @@ export function createFooterComponent(options: FooterComponentOptions): AtelierF
 		}, WORKING_ANIMATION_INTERVAL_MS);
 	};
 
-	const renderSurface = (width: number, surface: FooterSurface): string => {
-		const { line, workingActivity } = renderFooter(
+	const renderSurface = (width: number, surface: FooterSurface): string[] => {
+		const { line, statusRows: rows, workingActivity } = renderFooter(
 			options.getState(),
 			options.getConfig(),
 			options.theme,
@@ -519,15 +573,15 @@ export function createFooterComponent(options: FooterComponentOptions): AtelierF
 		// Animate only while the full working label is on screen; the telemetry row never shows it.
 		if (surface !== "telemetry")
 			syncAnimation(workingActivity !== undefined && line.includes(workingActivity));
-		return line;
+		return surface === "all" && rows.length > 0 ? [line, ...rows] : [line];
 	};
 
 	return {
 		render(width) {
-			return [renderSurface(width, "all")];
+			return renderSurface(width, "all");
 		},
 		renderHeader(width) {
-			return renderSurface(width, "header");
+			return renderSurface(width, "header")[0] ?? "";
 		},
 		renderTelemetry(width) {
 			const line = renderSurface(Math.max(0, width - 4), "telemetry");

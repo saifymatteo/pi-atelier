@@ -209,6 +209,7 @@ describe("Display Settings Workspace", () => {
 		expect(rendered).toContain("order user");
 		expect(rendered.indexOf("1  ○ brand")).toBeLessThan(rendered.indexOf("2  ● activity"));
 		expect(rendered.indexOf("2  ● activity")).toBeLessThan(rendered.indexOf("3  ◆ metrics"));
+		expect(rendered).not.toContain("brand › activity");
 	});
 
 	it.each([40, 80, 120])("uses one real responsive Status Rail preview at %s columns", (width) => {
@@ -222,7 +223,9 @@ describe("Display Settings Workspace", () => {
 		expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
 		expect(previewStart).toBeGreaterThan(0);
 		expect(lines[previewStart + 1]).toContain("CRAFTING");
-		expect(lines[previewStart + 2]).toContain("└");
+		expect(lines[previewStart + 2]).toContain("SYNC");
+		expect(lines[previewStart + 3]).toContain("└");
+		expect(lines.join("\n")).not.toContain("brand        ATELIER");
 	});
 
 	it("bounds the Display Settings frame to the live viewport without clipping its border", () => {

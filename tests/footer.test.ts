@@ -4,7 +4,7 @@ import { disposeAfterTest } from "./helpers/cleanup.js";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyDisplayTemplate, legacySegmentsToLayout } from "../src/display.js";
-import { createFooterComponent, renderFooterLine } from "../src/footer.js";
+import { createFooterComponent, renderFooterLine, renderFooterLines } from "../src/footer.js";
 import { type AtelierConfig, type AtelierState, type FooterState } from "../src/types.js";
 
 const stripAnsi = (text: string) => text.replace(/\u001b\[[0-9;]*m/g, "");
@@ -368,7 +368,7 @@ describe("footer", () => {
 		expect(gitGone).toBeGreaterThan(modelGone);
 	});
 
-	it("removes configured brand and extension statuses before Git and thinking", () => {
+	it("keeps extension statuses on dedicated rows while the brand still drops first", () => {
 		const config: AtelierConfig = {
 			...DEFAULT_CONFIG,
 			preset: "classic",
@@ -377,8 +377,10 @@ describe("footer", () => {
 			),
 		};
 		const configuredState = { ...state, extensionStatuses: ["INDEXING"] };
-		expect(plainAt(180, config, configuredState)).toEqual(expect.stringContaining("ATELIER"));
-		expect(plainAt(180, config, configuredState)).toEqual(expect.stringContaining("INDEXING"));
+		const rows = (width: number): string[] =>
+			renderFooterLines(configuredState, config, plainTheme, width).map(stripAnsi);
+		expect(rows(180)[0]).toEqual(expect.stringContaining("ATELIER"));
+		expect(rows(180)[1]).toEqual(expect.stringContaining("INDEXING"));
 
 		const [brandGone, statusGone, gitGone, thinkingGone] = disappearanceWidths(
 			["ATELIER", "INDEXING", "main*", "medium"],
@@ -386,6 +388,10 @@ describe("footer", () => {
 			configuredState,
 		) as [number, number, number, number];
 		expect(Math.min(brandGone, statusGone)).toBeGreaterThan(Math.max(gitGone, thinkingGone));
+		for (const width of [Math.min(brandGone, statusGone), 80, 24]) {
+			expect(rows(width)[0]).not.toContain("INDEXING");
+			expect(rows(width)[1]).toEqual(expect.stringContaining("INDEXING"));
+		}
 	});
 
 	it("keeps activity and context after optional information is removed", () => {
@@ -403,10 +409,14 @@ describe("footer", () => {
 	});
 
 	it("renders the actual classic preset segment set", () => {
-		const classic = plainAt(180, actualClassicPresetConfig, {
-			...state,
-			extensionStatuses: ["INDEXING"],
-		});
+		const classic = renderFooterLines(
+			{ ...state, extensionStatuses: ["INDEXING"] },
+			actualClassicPresetConfig,
+			plainTheme,
+			180,
+		)
+			.map(stripAnsi)
+			.join("\n");
 		for (const text of [
 			`${icons.input} 324k`,
 			`${icons.context} 27.0%`,
@@ -591,22 +601,27 @@ describe("footer", () => {
 			preset: "editorial",
 			showExtensionStatuses: false,
 		}) as AtelierConfig;
-		const line = renderFooterLine({ ...state, extensionStatuses: ["INDEXING"] }, visible, plainTheme, 180);
-		expect(line).toContain("ATELIER");
-		expect(line).toContain("INDEXING");
+		const visibleLines = renderFooterLines(
+			{ ...state, extensionStatuses: ["INDEXING"] },
+			visible,
+			plainTheme,
+			180,
+		).map(stripAnsi);
+		expect(visibleLines[0]).toContain("ATELIER");
+		expect(visibleLines[1]).toContain("INDEXING");
 
 		const hidden = withVisible(["activity", "metrics", "context"], {
 			preset: "classic",
 			showExtensionStatuses: true,
 		}) as AtelierConfig;
-		const hiddenLine = renderFooterLine(
+		const hiddenLines = renderFooterLines(
 			{ ...state, extensionStatuses: ["INDEXING"] },
 			hidden,
 			plainTheme,
 			180,
-		);
-		expect(hiddenLine).not.toContain("ATELIER");
-		expect(hiddenLine).not.toContain("INDEXING");
+		).map(stripAnsi);
+		expect(hiddenLines.join("\n")).not.toContain("ATELIER");
+		expect(hiddenLines.join("\n")).not.toContain("INDEXING");
 	});
 
 	it("honors preset, density, and configured item order", () => {
@@ -693,8 +708,8 @@ describe("footer", () => {
 		}
 	});
 
-	it("sanitizes optional text and drops oversized statuses before state or telemetry", () => {
-		const sanitized = renderFooterLine(
+	it("sanitizes optional text and truncates oversized statuses onto their own rows", () => {
+		const sanitized = renderFooterLines(
 			{
 				...state,
 				modelId: "gpt\n5",
@@ -705,21 +720,26 @@ describe("footer", () => {
 			DEFAULT_CONFIG,
 			plainTheme,
 			180,
-		);
+		)
+			.map(stripAnsi)
+			.join("\n");
 		for (const text of ["gpt 5", "high now", "feature rail*", "workflow: running now"]) {
 			expect(sanitized).toContain(text);
 		}
-		expect(sanitized).not.toMatch(/[\n\t]/);
+		expect(sanitized.split("\n")).not.toEqual(expect.arrayContaining([expect.stringMatching(/[\t]/)]));
 
-		const oversized = renderFooterLine(
+		const oversizedRows = renderFooterLines(
 			{ ...state, extensionStatuses: ["x".repeat(200)] },
 			DEFAULT_CONFIG,
 			plainTheme,
 			160,
-		);
-		expect(oversized).toContain("● READY");
-		expect(oversized).toContain(`${icons.context} 27.0%`);
-		expect(oversized).not.toContain("xxxxxxxxxx");
+		).map(stripAnsi);
+		const statusRow = oversizedRows[1] ?? "";
+		expect(oversizedRows[0]).toContain("● READY");
+		expect(oversizedRows[0]).toContain(`${icons.context} 27.0%`);
+		expect(statusRow.endsWith("…")).toBe(true);
+		expect(statusRow).not.toContain("x".repeat(200));
+		expect(visibleWidth(statusRow)).toBeLessThanOrEqual(160);
 	});
 
 	it("reserves ellipsis width so animated frames never move the model", () => {
