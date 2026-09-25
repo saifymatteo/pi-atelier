@@ -2,8 +2,8 @@ import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/p
 import { formatTokens } from "./metrics.js";
 import { type AtelierPalette, createPalette, type PaletteRole } from "./palette.js";
 import { responsePerformanceValues } from "./run-activity.js";
-import { DEFAULT_CONFIG } from "./types.js";
 import type { AtelierConfig, AtelierMetrics, AtelierState, DisplayValue, FooterState } from "./types.js";
+import { DEFAULT_CONFIG } from "./types.js";
 
 export interface ThemeLike {
 	readonly name?: string;
@@ -75,6 +75,8 @@ interface FooterItem {
 	compact: string;
 	dropRank: number;
 	required: boolean;
+	/** Individual sanitized statuses behind the joined `full` text; set for the status item. */
+	statuses?: readonly string[];
 }
 
 type FooterSurface = "all" | "header" | "telemetry";
@@ -299,9 +301,9 @@ function buildItems(
 		}
 
 		if (segment === "statuses") {
-			const statuses = state.extensionStatuses.map(sanitize).filter(Boolean).join(" ");
-			if (statuses) {
-				const rendered = palette.paint("muted", statuses);
+			const statuses = state.extensionStatuses.map(sanitize).filter(Boolean);
+			if (statuses.length > 0) {
+				const rendered = palette.paint("muted", statuses.join(" "));
 				add({
 					id: "status",
 					zone: "left",
@@ -309,6 +311,7 @@ function buildItems(
 					compact: rendered,
 					dropRank: DROP.status,
 					required: false,
+					statuses,
 				});
 			}
 			continue;
@@ -485,7 +488,7 @@ function compose(
 	};
 
 	const droppable = active.filter((item) => !item.required).sort((a, b) => a.dropRank - b.dropRank);
-	// Long contributed statuses must not force the rest of the rail into compact form.
+	// Zero-rank items (brand, header statuses, menu) yield before the rest of the rail compacts.
 	for (const item of droppable.filter((candidate) => candidate.dropRank === 0)) {
 		if (measured() <= width) break;
 		const index = active.findIndex((candidate) => candidate.id === item.id);
@@ -528,16 +531,24 @@ function compose(
 	return truncateToWidth([leftText, rightText].filter(Boolean).join("  "), width, "");
 }
 
-export function renderFooterLine(
+interface FooterContent {
+	/** The composed single-line rail for the requested surface. */
+	rail: string;
+	/** Sanitized statuses rendered on dedicated rows below the rail (complete surface only). */
+	statusParts: readonly string[];
+	palette: AtelierPalette;
+}
+
+function renderFooterContent(
 	state: FooterState,
 	config: AtelierConfig,
 	theme: ThemeLike,
 	width: number,
-	colorEnabled = true,
-	workingDots = "...",
-	surface: FooterSurface = "all",
-): string {
-	if (width <= 0) return "";
+	colorEnabled: boolean,
+	workingDots: string,
+	surface: FooterSurface,
+): FooterContent {
+	if (width <= 0) return { rail: "", statusParts: [], palette: createPalette(theme, colorEnabled) };
 	const palette = createPalette(theme, colorEnabled);
 	const symbols = config.nerdFont ? FOOTER_ICONS : PLAIN_SYMBOLS;
 	let items = buildItems(state, config, theme, colorEnabled, workingDots, symbols);
@@ -556,11 +567,77 @@ export function renderFooterLine(
 			.filter((item) => !HEADER_ITEMS.has(item.id) && available[item.id] !== false)
 			.map((item) => ({ ...item, zone: item.id === "performance" || item.id === "menu" ? "right" : "left" }));
 	}
+	// On the complete surface, statuses leave the rail and occupy their own rows below it.
+	let statusParts: readonly string[] = [];
+	if (surface === "all") {
+		const statusItem = items.find((item) => item.id === "status");
+		if (statusItem) {
+			statusParts = statusItem.statuses ?? [];
+			items = items.filter((item) => item.id !== "status");
+		}
+	}
 	const line = compose(items, width, palette, symbols.separator, surface === "header");
 	if (surface === "telemetry" && items.length > 0 && items.every((item) => item.zone === "right")) {
-		return `${" ".repeat(Math.max(0, width - visibleWidth(line)))}${line}`;
+		return {
+			rail: `${" ".repeat(Math.max(0, width - visibleWidth(line)))}${line}`,
+			statusParts,
+			palette,
+		};
 	}
-	return truncateToWidth(line, width, "");
+	return { rail: truncateToWidth(line, width, ""), statusParts, palette };
+}
+
+/** Pack whole statuses left-to-right, wrapping to a fresh row when the next status does not fit. */
+function statusRows(parts: readonly string[], width: number, palette: AtelierPalette): string[] {
+	const rows: string[] = [];
+	let current = "";
+	for (const part of parts) {
+		const painted = palette.paint("muted", part);
+		const candidate = current ? `${current} ${painted}` : painted;
+		if (visibleWidth(candidate) <= width) {
+			current = candidate;
+			continue;
+		}
+		if (current) rows.push(current);
+		current = visibleWidth(painted) <= width ? painted : truncateToWidth(painted, width, "…");
+	}
+	if (current) rows.push(current);
+	return rows;
+}
+
+export function renderFooterLine(
+	state: FooterState,
+	config: AtelierConfig,
+	theme: ThemeLike,
+	width: number,
+	colorEnabled = true,
+	workingDots = "...",
+	surface: FooterSurface = "all",
+): string {
+	return renderFooterContent(state, config, theme, width, colorEnabled, workingDots, surface).rail;
+}
+
+/** Footer rows for a surface: the rail row, plus the wrapped status rows on the complete surface. */
+export function renderFooterLines(
+	state: FooterState,
+	config: AtelierConfig,
+	theme: ThemeLike,
+	width: number,
+	colorEnabled = true,
+	workingDots = "...",
+	surface: FooterSurface = "all",
+): string[] {
+	const { rail, statusParts, palette } = renderFooterContent(
+		state,
+		config,
+		theme,
+		width,
+		colorEnabled,
+		workingDots,
+		surface,
+	);
+	if (surface !== "all" || statusParts.length === 0) return [rail];
+	return [rail, ...statusRows(statusParts, width, palette)];
 }
 
 export interface FooterComponentOptions {
@@ -605,12 +682,12 @@ export function createFooterComponent(options: FooterComponentOptions): AtelierF
 		}, WORKING_ANIMATION_INTERVAL_MS);
 	};
 
-	const renderSurface = (width: number, surface: FooterSurface): string => {
+	const renderSurface = (width: number, surface: FooterSurface): string[] => {
 		const state = options.getState();
 		const config = options.getConfig();
 		const colorEnabled = options.colorEnabled ?? true;
 		const workingDots = WORKING_DOT_FRAMES[frameIndex] ?? WORKING_DOT_FRAMES[0];
-		const line = renderFooterLine(state, config, options.theme, width, colorEnabled, workingDots, surface);
+		const lines = renderFooterLines(state, config, options.theme, width, colorEnabled, workingDots, surface);
 		const fullActivity = activityText(
 			state,
 			createPalette(options.theme, colorEnabled),
@@ -619,19 +696,20 @@ export function createFooterComponent(options: FooterComponentOptions): AtelierF
 			false,
 			config.nerdFont,
 		);
-		if (surface !== "telemetry") syncAnimation(state.activity === "working" && line.includes(fullActivity));
-		return line;
+		if (surface !== "telemetry")
+			syncAnimation(state.activity === "working" && (lines[0] ?? "").includes(fullActivity));
+		return lines;
 	};
 
 	return {
 		render(width) {
-			return [renderSurface(width, "all")];
+			return renderSurface(width, "all");
 		},
 		renderHeader(width) {
-			return renderSurface(width, "header");
+			return renderSurface(width, "header")[0] ?? "";
 		},
 		renderTelemetry(width) {
-			const line = renderSurface(Math.max(0, width - 4), "telemetry");
+			const line = renderSurface(Math.max(0, width - 4), "telemetry")[0] ?? "";
 			return line ? [`  ${line}  `] : [];
 		},
 		invalidate() {},

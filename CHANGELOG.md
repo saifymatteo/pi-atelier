@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Move extension statuses out of the Status Rail row onto dedicated status rows beneath it. Statuses wrap as whole items onto further rows until every status is displayed, truncate an over-wide status with an ellipsis, and no longer drop or force the rail to compact when long. The composer header and telemetry row keep their existing single-line behavior.
+
 ## 0.12.0 — 2026-09-26
 
 - Keep sidebar plot space reserved while a dialog covers it, instead of switching smooth native curves into character staircases. Restore the plot after the dialog closes.

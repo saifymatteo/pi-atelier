@@ -6,23 +6,23 @@ import {
 	reorderSegment,
 	toggleSegmentVisibility,
 } from "./display.js";
-import { renderFooterLine, type ThemeLike } from "./footer.js";
+import { renderFooterLines, type ThemeLike } from "./footer.js";
 import {
 	DEFAULT_SIDEBAR_PANEL_LAYOUT,
-	sanitizeSidebarPanelText,
-	SIDEBAR_PANEL_MAX_TITLE_CHARS,
 	isSidebarPanelId,
+	SIDEBAR_PANEL_MAX_TITLE_CHARS,
+	sanitizeSidebarPanelText,
 } from "./sidebar-panels.js";
 import type {
 	AtelierConfig,
-	SidebarPanelId,
-	SidebarPanelLayout,
 	DisplayPatch,
 	DisplayProvenance,
 	DisplaySettings,
 	FooterState,
 	SegmentId,
 	SessionDisplayOverride,
+	SidebarPanelId,
+	SidebarPanelLayout,
 	TemplateName,
 } from "./types.js";
 
@@ -489,15 +489,15 @@ export function createSettingsWorkspace(options: SettingsWorkspaceOptions): Sett
 			];
 			const sidebarPreviewRows = sidebarDraft.filter((entry) => entry.visible).map((entry) => entry.id);
 			const previewConfig = { ...options.getRenderConfig(), ...cloneDisplay(display) };
-			const previewLine = renderFooterLine(
+			const previewLines = renderFooterLines(
 				representativeState,
 				previewConfig,
 				options.theme,
 				Math.max(1, outerInner - 6),
 				options.colorEnabled ?? true,
-			);
+			).map((line) => `  ${line}`);
 			const preview = [
-				...panel("Preview", [`  ${previewLine}`], outerInner, options.theme, true),
+				...panel("Preview", previewLines, outerInner, options.theme, true),
 				"",
 				...panel(
 					"Sidebar Preview",

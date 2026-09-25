@@ -60,6 +60,8 @@ The composer's top border holds activity, model/thinking, workspace and Git (con
 
 The quieter row below shows measured token usage, cache, cost, and response timing. Unmeasured telemetry stays hidden. In Nerd Font mode, [prompt icons](https://starship.rs/presets/nerd-font) identify model, thinking, workspace, Git, input/output, cache, latency, throughput, and context. Plain text mode uses labels such as `git`, `ctx`, `in`, `out`, `TTFT`, and `TPS`. Display presets, visibility, and ordering still apply within each row.
 
+Extension statuses contributed by other Pi extensions render on dedicated status rows beneath the rail row. Each status stays whole and wraps onto a further row when it does not fit, so every status remains displayed; a single status wider than the terminal is truncated with an ellipsis. Hiding the statuses segment removes the status rows.
+
 The composer retains its rounded frame, input padding, scroll indicators, and Pi's thinking-level/bash-mode border colors. When a Pi selector replaces the composer, the terminal is below 12 rows tall, or the editor is too narrow for the inset strip, Atelier falls back to the complete status rail below.
 
 Pi supports one custom footer and one custom editor at a time. Extension load order determines which chrome is visible.
