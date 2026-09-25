@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.11.3 — 2026-09-25
 
-- Move extension statuses out of the Status Rail row onto dedicated status rows beneath it. Statuses wrap as whole items onto further rows until every status is displayed, truncate an over-wide status with an ellipsis, and no longer drop or force the rail to compact when long. The composer header and telemetry row keep their existing single-line behavior.
+- Move extension statuses out of the Status Rail row onto dedicated status rows beneath it. Statuses wrap as whole items onto further rows until every status is displayed, truncate an over-wide status with an ellipsis, and no longer drop or force the rail to compact when long. Adjacent statuses in a row are separated by the rail's dim separator. The composer header and telemetry row keep their existing single-line behavior.
 - Remove the Control Center Actions page, including session details, rename and compaction prompts, and the unused `showSessionActions` setting.
 
 ## 0.11.2 — 2026-09-25
