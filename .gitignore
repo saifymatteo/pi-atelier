@@ -7,3 +7,5 @@ demo.mp4
 .tmp/
 .pi-subagents/
 .worktrees/
+.pi
+.codegraph
