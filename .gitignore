@@ -6,3 +6,5 @@ demo.mp4
 .DS_Store
 .tmp/
 .worktrees/
+.pi
+.codegraph
