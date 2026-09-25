@@ -588,12 +588,17 @@ function renderFooterContent(
 }
 
 /** Pack whole statuses left-to-right, wrapping to a fresh row when the next status does not fit. */
-function statusRows(parts: readonly string[], width: number, palette: AtelierPalette): string[] {
+function statusRows(
+	parts: readonly string[],
+	width: number,
+	palette: AtelierPalette,
+	separator: string,
+): string[] {
 	const rows: string[] = [];
 	let current = "";
 	for (const part of parts) {
 		const painted = palette.paint("muted", part);
-		const candidate = current ? `${current} ${painted}` : painted;
+		const candidate = current ? `${current}${palette.paint("dim", ` ${separator} `)}${painted}` : painted;
 		if (visibleWidth(candidate) <= width) {
 			current = candidate;
 			continue;
@@ -637,7 +642,15 @@ export function renderFooterLines(
 		surface,
 	);
 	if (surface !== "all" || statusParts.length === 0) return [rail];
-	return [rail, ...statusRows(statusParts, width, palette)];
+	return [
+		rail,
+		...statusRows(
+			statusParts,
+			width,
+			palette,
+			config.nerdFont ? FOOTER_ICONS.separator : PLAIN_SYMBOLS.separator,
+		),
+	];
 }
 
 export interface FooterComponentOptions {

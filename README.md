@@ -6,7 +6,7 @@ This repo is a hard fork of [Pi Atelier](https://github.com/michaelmjhhhh/pi-ate
 
 Extension statuses no longer share the status rail row. Each status stays whole and occupies rows beneath the rail:
 
-- Statuses wrap onto further rows until every status displays
+- Statuses wrap onto further rows until every status displays, joined by the rail's dim separator
 - A status wider than the terminal truncates with an ellipsis
 - The rail row never drops statuses or compacts to make room for them
 - The composer header and telemetry row keep upstream behavior
