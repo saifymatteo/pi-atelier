@@ -1,9 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Move extension statuses out of the Status Rail row onto dedicated status rows beneath it. Statuses wrap as whole items onto further rows until every status is displayed, truncate an over-wide status with an ellipsis, and no longer drop or force the rail to compact when long. The composer header and telemetry row keep their existing single-line behavior.
-
 ## 0.12.0 — 2026-09-26
 
 - Keep sidebar plot space reserved while a dialog covers it, instead of switching smooth native curves into character staircases. Restore the plot after the dialog closes.
@@ -15,6 +11,10 @@
 - Add a graph-only SUBAGENTS panel and framed `/atelier usage` view, with distinct per-child colors, numbered paginated legends, real observation markers and keyboard focus. Plot every readable child history without a six-curve display cap. Kitty-compatible terminals render anti-aliased curves; other terminals retain a text fallback ([#69](https://github.com/michaelmjhhhh/pi-atelier/issues/69)).
 - Preserve distinct same-millisecond replies and receipt-only continuation histories; remove the extra 32-source cutoff while retaining byte limits and explicit partial-data status.
 - Read owner-validated pi-subagents accounting events for reply-level cost history, reconcile completed curves against saved metadata, deduplicate repeated references and refresh only while background work is active. Main-agent usage stays separate.
+
+## 0.11.3 — 2026-09-25
+
+- Move extension statuses out of the Status Rail row onto dedicated status rows beneath it. Statuses wrap as whole items onto further rows until every status is displayed, truncate an over-wide status with an ellipsis, and no longer drop or force the rail to compact when long. Adjacent statuses in a row are separated by the rail's dim separator. The composer header and telemetry row keep their existing single-line behavior.
 
 ## 0.11.2 — 2026-09-25
 
