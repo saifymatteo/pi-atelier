@@ -594,8 +594,8 @@ export function createFooterComponent(options: FooterComponentOptions): AtelierF
 			return renderSurface(width, "header")[0] ?? "";
 		},
 		renderTelemetry(width) {
-			const line = renderSurface(Math.max(0, width - 4), "telemetry");
-			return line ? [`  ${line}  `] : [];
+			const line = renderSurface(Math.max(0, width - 4), "telemetry")[0] ?? "";
+			return visibleWidth(line) > 0 ? [`  ${line}  `] : [];
 		},
 		invalidate() {},
 		dispose() {

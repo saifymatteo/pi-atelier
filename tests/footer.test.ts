@@ -382,13 +382,13 @@ describe("footer", () => {
 		expect(rows(180)[0]).toEqual(expect.stringContaining("ATELIER"));
 		expect(rows(180)[1]).toEqual(expect.stringContaining("INDEXING"));
 
-		const [brandGone, statusGone, gitGone, thinkingGone] = disappearanceWidths(
-			["ATELIER", "INDEXING", "main*", "medium"],
+		const [brandGone, gitGone, thinkingGone] = disappearanceWidths(
+			["ATELIER", "main*", "medium"],
 			config,
 			configuredState,
-		) as [number, number, number, number];
-		expect(Math.min(brandGone, statusGone)).toBeGreaterThan(Math.max(gitGone, thinkingGone));
-		for (const width of [Math.min(brandGone, statusGone), 80, 24]) {
+		) as [number, number, number];
+		expect(brandGone).toBeGreaterThan(Math.max(gitGone, thinkingGone));
+		for (const width of [brandGone, 80, 24]) {
 			expect(rows(width)[0]).not.toContain("INDEXING");
 			expect(rows(width)[1]).toEqual(expect.stringContaining("INDEXING"));
 		}
