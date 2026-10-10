@@ -25,10 +25,15 @@ export function npm(args, options = {}) {
 	// The Windows fallback receives only flags and filesystem paths; quote each
 	// argument so spaces and shell operators in those paths remain literal.
 	const argv = shell ? args.map((arg) => `"${arg}"`) : [...prefix, ...args];
+	const env = { ...process.env };
+	for (const key of Object.keys(env)) {
+		if (key.toLowerCase() === "npm_config_allow_scripts") delete env[key];
+	}
 	const result = spawnSync(command, argv, {
 		cwd: options.cwd,
 		encoding: "utf8",
 		shell,
+		env,
 	});
 	if (result.error) throw result.error;
 	if (result.status !== 0) {
