@@ -1,7 +1,6 @@
-import nodePath from "node:path";
 import type { ToolExecutionEndEvent, ToolExecutionStartEvent } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { displayHomePath, displayPathWithin } from "./display-path.js";
+import { displayHomePath, displayPathWithin, resolveDisplayPath } from "./display-path.js";
 import { isRecord, PLACEHOLDER, sanitizeInline } from "./text.js";
 import type { DisplayValue, ResponsePerformance } from "./types.js";
 
@@ -299,8 +298,8 @@ function summarizePatternTool(args: Record<string, unknown>, cwd: string): strin
 function shortenPath(pathValue: string, cwd: string): string {
 	const safePath = sanitizeInline(pathValue);
 	if (safePath.length === 0) return "";
-	const normalizedCwd = nodePath.resolve(sanitizeInline(cwd));
-	const normalizedPath = nodePath.resolve(normalizedCwd, safePath);
+	const normalizedCwd = resolveDisplayPath("", sanitizeInline(cwd));
+	const normalizedPath = resolveDisplayPath(normalizedCwd, safePath);
 	return displayPathWithin(normalizedCwd, normalizedPath) ?? displayHomePath(normalizedPath);
 }
 
