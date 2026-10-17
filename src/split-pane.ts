@@ -45,6 +45,7 @@ interface FullscreenLayoutAdapterState {
 	splitRoot: Component;
 	sidebarWidth: number;
 	sidebarComponent: Component | undefined;
+	mainLayoutBuilder: ((root: Component) => Component) | undefined;
 }
 
 interface FullscreenOverlayAdapterState {
@@ -109,6 +110,7 @@ export interface SplitPaneControllerOptions {
 
 export interface SplitPaneController {
 	attach(tui: TUI): void;
+	setMainLayoutBuilder(builder: ((root: Component) => Component) | undefined): void;
 	show(): void;
 	setMode(mode: SidebarMode): void;
 	hide(): void;
@@ -149,6 +151,7 @@ export function createSplitPaneController(options: SplitPaneControllerOptions = 
 	let resizeMouseTerminal: TUI["terminal"] | undefined;
 	let fullscreenSidebarComponent: Component | undefined;
 	let fullscreenSidebarHidden = false;
+	let mainLayoutBuilder: ((root: Component) => Component) | undefined;
 	let imageCompositor: ImageCompositorBinding | undefined;
 	const adapterOwner = {};
 
@@ -205,7 +208,13 @@ export function createSplitPaneController(options: SplitPaneControllerOptions = 
 
 	const createFullscreenSplitRoot = (originalRoot: Component): Component =>
 		new HStack([
-			{ component: originalRoot, basis: 0, grow: 1, shrink: 1, minSize: MIN_MAIN_WIDTH },
+			{
+				component: mainLayoutBuilder?.(originalRoot) ?? originalRoot,
+				basis: 0,
+				grow: 1,
+				shrink: 1,
+				minSize: MIN_MAIN_WIDTH,
+			},
 			{
 				component: fullscreenSidebarComponent ?? EMPTY_SIDEBAR_COMPONENT,
 				basis: sidebarWidth,
@@ -226,7 +235,8 @@ export function createSplitPaneController(options: SplitPaneControllerOptions = 
 		if (currentState?.owner === adapterOwner && currentRoot === currentState.splitRoot) {
 			if (
 				currentState.sidebarWidth === sidebarWidth &&
-				currentState.sidebarComponent === fullscreenSidebarComponent
+				currentState.sidebarComponent === fullscreenSidebarComponent &&
+				currentState.mainLayoutBuilder === mainLayoutBuilder
 			) {
 				return;
 			}
@@ -235,6 +245,7 @@ export function createSplitPaneController(options: SplitPaneControllerOptions = 
 			currentState.splitRoot = splitRoot;
 			currentState.sidebarWidth = sidebarWidth;
 			currentState.sidebarComponent = fullscreenSidebarComponent;
+			currentState.mainLayoutBuilder = mainLayoutBuilder;
 			return;
 		}
 		if (!currentRoot) return;
@@ -246,6 +257,7 @@ export function createSplitPaneController(options: SplitPaneControllerOptions = 
 			splitRoot,
 			sidebarWidth,
 			sidebarComponent: fullscreenSidebarComponent,
+			mainLayoutBuilder,
 		};
 	};
 
@@ -592,6 +604,15 @@ export function createSplitPaneController(options: SplitPaneControllerOptions = 
 
 	return {
 		attach,
+		setMainLayoutBuilder(builder) {
+			if (mainLayoutBuilder === builder) {
+				syncFullscreenLayoutAdapter();
+				return;
+			}
+			mainLayoutBuilder = builder;
+			syncFullscreenLayoutAdapter();
+			tui?.requestRender();
+		},
 		show() {
 			if (disposed || enabled) return;
 			autoExpanded = undefined;
@@ -670,6 +691,7 @@ export function createSplitPaneController(options: SplitPaneControllerOptions = 
 			stopResize(true);
 			disposed = true;
 			enabled = false;
+			mainLayoutBuilder = undefined;
 			clearFullscreenSidebar();
 			restoreRegularRenderAdapter();
 			restoreFullscreenOverlayAdapter();

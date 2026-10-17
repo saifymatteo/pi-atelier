@@ -1,6 +1,12 @@
 import { basename } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Component, type OverlayHandle, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import {
+	type Component,
+	type OverlayHandle,
+	type TUI,
+	truncateToWidth,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 import { DEFAULT_CONFIG } from "./config.js";
 import { displayHomePath } from "./display-path.js";
 import { contextRole } from "./footer.js";
@@ -964,6 +970,8 @@ export function createSidebarComponent(options: SidebarComponentOptions): Compon
 }
 
 export interface SidebarController {
+	attachTui(tui: TUI): void;
+	setMainLayoutBuilder(builder: ((root: Component) => Component) | undefined): void;
 	show(): void;
 	setMode(mode: SidebarMode): void;
 	getStatus(): SidebarStatus;
@@ -1194,6 +1202,8 @@ export function createSidebarController(options: SidebarControllerOptions): Side
 	};
 
 	return {
+		attachTui: split.attach,
+		setMainLayoutBuilder: split.setMainLayoutBuilder,
 		show: () => show(),
 		hide,
 		setMode(mode) {

@@ -7,7 +7,7 @@ import {
 	getAgentDir,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { KeyId } from "@earendil-works/pi-tui";
+import { isViewportTUI, type KeyId } from "@earendil-works/pi-tui";
 import {
 	type CompletionNotification,
 	type CompletionNotifier,
@@ -18,6 +18,7 @@ import { DEFAULT_CONFIG, loadConfig, saveUserConfigPatch } from "../src/config.j
 import { AtelierEditor } from "../src/editor.js";
 import { type AtelierFooterComponent, createFooterComponent } from "../src/footer.js";
 import { createImageCompositorBinding } from "../src/image-compositor.js";
+import { createThinkingToolPanelLayout } from "../src/thinking-tool-panels.js";
 import { openAtelierControlCenter, openDisplaySettingsWorkspace, sidebarStatusLabel } from "../src/menu.js";
 import type { OverlayLifetime } from "../src/overlay-lifecycle.js";
 import { createRunActivityTracker, type RunActivityTracker } from "../src/run-activity.js";
@@ -253,6 +254,7 @@ export default function atelierExtension(
 		session.footerGeneration += 1;
 		const footerDisposer = session.footerDisposer;
 		session.footerDisposer = undefined;
+		attempt(() => session.sidebar.setMainLayoutBuilder(undefined));
 		// Pi may retain the old footer when removal fails; it is disposed below regardless.
 		if (restoreHostUi) resetHostUi(session.ctx);
 		if (footerDisposer) attempt(footerDisposer);
@@ -419,6 +421,9 @@ export default function atelierExtension(
 		let footer: AtelierFooterComponent | undefined;
 		let headerRendered = false;
 		let editorInstalled = false;
+		const thinkingToolPanelLayout = createThinkingToolPanelLayout(() =>
+			ctx.ui.notify("Thinking/tool panels are unavailable: unsupported Pi fullscreen layout", "warning"),
+		);
 		const detachEditor = (): void => {
 			if (editor) editor.renderStatusLine = undefined;
 			editor = undefined;
@@ -435,7 +440,11 @@ export default function atelierExtension(
 				if (getCurrentSession()) tui.requestRender();
 			};
 			const current = getCurrentSession();
-			if (current) current.requestFooterRender = footerRequestRender;
+			if (current) {
+				current.requestFooterRender = footerRequestRender;
+				current.sidebar.setMainLayoutBuilder(thinkingToolPanelLayout);
+				if (tui.mode === "fullscreen" && isViewportTUI(tui)) current.sidebar.attachTui(tui);
+			}
 			const component = createFooterComponent({
 				getState: (): FooterState => {
 					// A footer outliving its `setFooter(undefined)` reports detached inert state.
@@ -469,6 +478,11 @@ export default function atelierExtension(
 			const mounted: AtelierFooterComponent = {
 				...component,
 				render(width) {
+					const currentSession = getCurrentSession();
+					if (currentSession && tui.mode === "fullscreen" && isViewportTUI(tui)) {
+						currentSession.sidebar.setMainLayoutBuilder(thinkingToolPanelLayout);
+						currentSession.sidebar.attachTui(tui);
+					}
 					imageCompositor.sync();
 					// Selectors can temporarily replace the editor without disposing it.
 					const promptVisible = editorInstalled && headerRendered && editor?.statusLineVisible;
