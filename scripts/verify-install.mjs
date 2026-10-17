@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { npm, npmPackReport } from "./npm-run.mjs";
 
 const repoDir = fileURLToPath(new URL("..", import.meta.url));
+const packageName = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).name;
+const packagePath = `node_modules/${packageName}`;
 const tempDir = mkdtempSync(join(tmpdir(), "pi-atelier-install-"));
 
 try {
@@ -20,22 +22,20 @@ try {
 		cwd: consumerDir,
 	});
 	const lock = JSON.parse(readFileSync(join(consumerDir, "package-lock.json"), "utf8"));
-	const unexpected = Object.keys(lock.packages).filter(
-		(path) => path !== "" && path !== "node_modules/pi-atelier",
-	);
+	const unexpected = Object.keys(lock.packages).filter((path) => path !== "" && path !== packagePath);
 	assert.equal(
 		unexpected.length,
 		0,
 		`Installation pulled in ${unexpected.length} unexpected dependencies: ${unexpected.slice(0, 10).join(", ")}`,
 	);
-	assert.ok(lock.packages["node_modules/pi-atelier"], "Packed pi-atelier was not installed");
+	assert.ok(lock.packages[packagePath], `Packed ${packageName} was not installed`);
 
 	process.env.PI_CODING_AGENT_DIR = join(tempDir, "agent");
 	// Pi's package index does not export the loader; this deep import may need updating on Pi upgrades.
 	const { loadExtensions } = await import(
 		"../node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js"
 	);
-	const packageDir = join(consumerDir, "node_modules", "pi-atelier");
+	const packageDir = join(consumerDir, "node_modules", packageName);
 	const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
 	const entries = manifest.pi.extensions.map((path) => join(packageDir, path));
 	const result = await loadExtensions(entries, consumerDir);
