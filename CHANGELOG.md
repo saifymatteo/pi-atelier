@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.0 — 2026-10-22
+
+- Add JSON-configurable ordering of individual custom-extension statuses through `extensionStatusOrder`, using exact `setStatus()` keys. Listed statuses appear first, while unlisted statuses retain Pi's order. Trusted project configuration can override the user list.
+- Document status ordering as an additional fork feature alongside dedicated status rows, including configuration semantics and manual verification steps.
+- Update development-only Vite from 8.1.4 to 8.3.5 and refresh its dependency tree to resolve launch-editor security advisories. The extension still ships without runtime dependencies.
+
 ## 0.16.0 — 2026-10-15
 
 - Add optional responsive progress bars to contributed label/value rows; narrow panels retain the label and value without a bar ([#93](https://github.com/michaelmjhhhh/pi-atelier/issues/93)).
