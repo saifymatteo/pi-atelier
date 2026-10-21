@@ -80,6 +80,7 @@ export interface AtelierConfig extends DisplaySettings {
 	showSidebarToolNames: boolean;
 	showSidebarOnStartup: boolean;
 	sidebarPanelLayout: SidebarPanelLayout;
+	extensionStatusOrder: string[];
 	completionNotifications: boolean;
 }
 

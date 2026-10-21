@@ -37,6 +37,7 @@ export const DEFAULT_CONFIG: AtelierConfig = {
 	showSidebarToolNames: false,
 	showSidebarOnStartup: true,
 	sidebarPanelLayout: cloneLayout(DEFAULT_SIDEBAR_PANEL_LAYOUT),
+	extensionStatusOrder: [],
 	completionNotifications: true,
 };
 
@@ -313,6 +314,15 @@ function applyNonDisplay(
 
 	applyContextThresholds(input, config, warnings);
 
+	if ("extensionStatusOrder" in input) {
+		if (
+			Array.isArray(input.extensionStatusOrder) &&
+			input.extensionStatusOrder.every((key) => typeof key === "string" && key.trim().length > 0)
+		) {
+			config.extensionStatusOrder = [...new Set<string>(input.extensionStatusOrder)];
+		} else warnings.push("extensionStatusOrder must be an array of non-empty strings");
+	}
+
 	if (typeof input.currencyDecimals === "number") {
 		if (
 			Number.isInteger(input.currencyDecimals) &&
@@ -371,6 +381,7 @@ export function resolveConfig(input: {
 		...DEFAULT_CONFIG,
 		segmentLayout: cloneLayout(DEFAULT_CONFIG.segmentLayout),
 		sidebarPanelLayout: cloneLayout(DEFAULT_CONFIG.sidebarPanelLayout),
+		extensionStatusOrder: [...DEFAULT_CONFIG.extensionStatusOrder],
 	};
 	const warnings: string[] = [];
 	const displayLayers: DisplayLayerState = {};

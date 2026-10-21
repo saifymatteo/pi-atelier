@@ -122,6 +122,8 @@ Project settings override user settings, and session changes override both. Font
 
 Use **Settings → Display** to reorder or hide status rail segments and sidebar panels. Undo restores the latest Display or Sidebar edit, including a Display Revert. The legacy user settings `showSidebarAgent` and `showSidebarTodos` still apply when `sidebarPanelLayout` is absent.
 
+To reorder individual custom-extension statuses, set `extensionStatusOrder` in the JSON file. See [Extension status ordering](#extension-status-ordering).
+
 ### Sidebar panels from other extensions
 
 Another extension can add a panel through Pi's event bus. `registerSidebarPanel` publishes the panel and answers discovery requests, so either extension may load first:
@@ -215,8 +217,43 @@ Development stays on Pi 0.84.0 to check the minimum supported API. A scoped npm 
 
 </details>
 
-## Fork change: status rows
+## Fork features: extension statuses
+
+### Dedicated status rows
 
 This fork renders extension statuses on dedicated rows beneath the status rail instead of inline in it. Statuses wrap as whole items, joined by the rail's dim separator, oversized statuses truncate with an ellipsis, and the rail row keeps upstream behavior.
+
+### Extension status ordering
+
+In addition to dedicated rows, this fork supports JSON-configurable ordering of individual custom-extension statuses:
+
+```json
+{
+  "extensionStatusOrder": ["my-extension", "another-extension"]
+}
+```
+
+Add this field to `~/.pi/agent/pi-atelier.json`, or to `<project>/.pi/pi-atelier.json` for a trusted project override. The project list replaces the user list rather than merging with it. Run `/reload` after editing the file.
+
+- Entries are exact, case-sensitive status keys: `ctx.ui.setStatus("my-extension", text)` uses the key `my-extension`. These are not necessarily extension filenames, package names, or displayed labels. An extension may publish several keys; find them in its `setStatus()` calls.
+- Listed statuses appear first in the configured order. Unlisted statuses follow in the order provided by Pi; none are hidden by this setting.
+- Missing keys are ignored until their statuses appear. Duplicate keys are used once. An absent setting or `[]` preserves Pi's ordering.
+- The list must contain non-empty strings. Invalid input produces a configuration warning and keeps the inherited list. Status sanitization, wrapping, truncation, and visibility settings remain unchanged.
+
+#### Manual verification TODO
+
+Open a temporary session with only this checkout's Atelier extension:
+
+```bash
+./node_modules/.bin/pi --no-session --no-extensions -e ./extensions/index.ts
+```
+
+Custom status producers are intentionally not loaded by that command. For ordering checks, explicitly load trusted producer extensions with additional `-e <path>` arguments; do not load an installed copy of Atelier.
+
+- [ ] Configure two known status keys in reverse order, run `/reload`, and confirm listed statuses come first while unlisted statuses remain visible.
+- [ ] Update and remove a producer's status; confirm its position stays configured and removed statuses disappear. An unavailable configured key must not create a blank item.
+- [ ] Try `[]`, duplicate keys, and an invalid list such as `[42]`; confirm default ordering, no duplicate output, and a warning respectively.
+- [ ] Check a trusted project override and an untrusted project; confirm only the trusted project's list overrides the user list.
+- [ ] Resize the terminal; confirm existing dedicated-row wrapping and truncation remain intact when status rows are visible.
 
 [MIT](https://github.com/michaelmjhhhh/pi-atelier/blob/main/LICENSE)

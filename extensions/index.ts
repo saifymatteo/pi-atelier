@@ -187,8 +187,20 @@ export default function atelierExtension(
 		};
 	}
 
-	function updateExtensionStatuses(targetSession: ActiveSession, next: readonly string[]): void {
+	function updateExtensionStatuses(
+		targetSession: ActiveSession,
+		statuses: ReadonlyMap<string, string>,
+	): void {
 		if (activeSession !== targetSession) return;
+		const remaining = new Map(statuses);
+		const next: string[] = [];
+		for (const key of targetSession.runtime.getConfig().extensionStatusOrder) {
+			const status = remaining.get(key);
+			if (status === undefined) continue;
+			next.push(status);
+			remaining.delete(key);
+		}
+		next.push(...remaining.values());
 		const current = targetSession.extensionStatuses;
 		if (next.length === current.length && next.every((status, index) => status === current[index])) return;
 		targetSession.extensionStatuses = [...next];
@@ -442,7 +454,7 @@ export default function atelierExtension(
 					const currentSession = getCurrentSession();
 					if (!currentSession) return retiredState;
 					const branch = footerData.getGitBranch();
-					updateExtensionStatuses(currentSession, Array.from(footerData.getExtensionStatuses().values()));
+					updateExtensionStatuses(currentSession, footerData.getExtensionStatuses());
 					const performance = currentSession.runActivity.getSnapshot().performance;
 					return {
 						...currentSession.runtime.getState(),
@@ -572,7 +584,7 @@ export default function atelierExtension(
 				current.completionNotifier.reset();
 				current.todos = [];
 				current.sidebar.hide();
-				updateExtensionStatuses(current, []);
+				updateExtensionStatuses(current, new Map());
 				clearFooter(current, true);
 				ctx.ui.notify("Pi Atelier disabled", "info");
 			},
