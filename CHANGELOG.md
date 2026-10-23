@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.1 — 2026-10-23
+
+- Restore the complete custom footer and dedicated extension-status rows below the copy-friendly editor, even when its status header is visible. Keep the editor's appearance and editing behavior unchanged.
+
 ## 0.18.0 — 2026-10-23
 
 - Integrate the copy-friendly editor into Atelier: use the full available width with fixed one-column padding and no vertical side rails, while retaining the status header, native horizontal rules, scroll hints, and autocomplete placement. Disable the standalone `copy-friendly-editor.ts` to avoid competing editor ownership.

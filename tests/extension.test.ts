@@ -82,7 +82,6 @@ describe("extension registration", () => {
 
 			Object.assign(tui.terminal, { columns: 80, rows: 24 });
 			expect(editor.render(80)[0]).toContain("10.0%");
-			expect(footer.render(80).join("\n")).not.toContain("10.0%");
 		} finally {
 			footer.dispose();
 		}

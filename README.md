@@ -220,7 +220,7 @@ Development stays on Pi 0.84.0 to check the minimum supported API. A scoped npm 
 
 ## Fork feature: copy-friendly editor
 
-Atelier owns the composer as well as its status header. The editor uses the full width available beside the sidebar, with one column of padding on each side and no vertical rails or corner caps. Pi's native horizontal rules, thinking-level and bash-mode colors, scroll hints, cursor handling, and autocomplete remain in place. On narrow or short terminals, the complete footer remains the fallback for status information.
+Atelier owns the composer as well as its status header. The editor uses the full width available beside the sidebar, with one column of padding on each side and no vertical rails or corner caps. Pi's native horizontal rules, thinking-level and bash-mode colors, scroll hints, cursor handling, and autocomplete remain in place. The complete custom footer stays visible below the editor, including dedicated extension-status rows, even when the editor's status header is visible.
 
 The one-column padding is fixed even if Pi reapplies its `editorPaddingX` setting. No ownership-reclaim timers or extra extension are needed. Disable the standalone `copy-friendly-editor.ts` before switching to this version; keep a renamed backup if you want to roll back.
 
@@ -235,7 +235,7 @@ pi-bolt --no-session --no-extensions -e ./extensions/index.ts
 - [ ] Type and select a multiline draft in the terminal; confirm copied text has no side-rail characters. In fullscreen mode, use your terminal's selection override (often Shift-drag).
 - [ ] Resize the terminal and toggle `/atelier sidebar`; confirm the draft fills the available area with one-column padding, wrapping and cursor movement remain aligned, and no text is clipped.
 - [ ] Open slash-command and file autocomplete; confirm suggestions remain below the bottom rule and keyboard selection still works.
-- [ ] Use a long draft, change thinking level, and enter bash mode; confirm scroll hints, border colors, and the status header survive. Shrink the terminal to confirm the complete-footer fallback.
+- [ ] Use a long draft, change thinking level, and enter bash mode; confirm scroll hints, border colors, and the status header survive. Confirm the complete custom footer stays visible at normal and narrow sizes, including after `/reload` and when a selector temporarily replaces the editor.
 - [ ] Run `/reload`, `/atelier disable`, and `/atelier enable`; confirm the native editor returns when disabled and the copy-friendly editor returns when enabled. Repeat with `--tui-mode regular`.
 
 ## Fork features: extension statuses

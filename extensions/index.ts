@@ -429,12 +429,9 @@ export default function atelierExtension(
 		const generation = ++targetSession.footerGeneration;
 		let editor: AtelierEditor | undefined;
 		let footer: AtelierFooterComponent | undefined;
-		let headerRendered = false;
-		let editorInstalled = false;
 		const detachEditor = (): void => {
 			if (editor) editor.renderStatusLine = undefined;
 			editor = undefined;
-			editorInstalled = false;
 		};
 		const getCurrentSession = (): ActiveSession | undefined => {
 			const current = activeSession;
@@ -482,10 +479,7 @@ export default function atelierExtension(
 				...component,
 				render(width) {
 					imageCompositor.sync();
-					// Selectors can temporarily replace the editor without disposing it.
-					const promptVisible = editorInstalled && headerRendered && editor?.statusLineVisible;
-					headerRendered = false;
-					return promptVisible ? component.renderTelemetry(width) : component.render(width);
+					return component.render(width);
 				},
 				dispose() {
 					try {
@@ -506,16 +500,11 @@ export default function atelierExtension(
 				const next = new AtelierEditor(tui, theme, keybindings);
 				next.renderStatusLine = (width) => {
 					// Fullscreen Pi crops the top of a tall draft after editor rendering.
-					// Keep essential state in the bottom footer on short terminals.
-					const line =
-						getCurrentSession() && tui.terminal.rows >= 12 ? (footer?.renderHeader(width) ?? "") : "";
-					headerRendered = Boolean(line);
-					return line;
+					return getCurrentSession() && tui.terminal.rows >= 12 ? (footer?.renderHeader(width) ?? "") : "";
 				};
 				editor = next;
 				return next;
 			});
-			editorInstalled = true;
 		} catch {
 			// The custom composer is optional; the Status Rail should still install.
 			detachEditor();

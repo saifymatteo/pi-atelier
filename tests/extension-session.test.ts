@@ -21,23 +21,19 @@ import {
 } from "./helpers/extension.js";
 
 describe("extension session", () => {
-	it("moves session identity back to the footer while a selector replaces the editor", async () => {
+	it("keeps session identity in the footer while a selector replaces the editor", async () => {
 		const h = harness();
 		await start(h);
 		const { editor, footer } = mountComposer(h);
 		try {
 			const header = editor.render(80)[0];
 			for (const text of ["● READY", "project", "main", "10.0%"]) expect(header).toContain(text);
-			const telemetry = footer.render(80).join("\n");
-			expect(telemetry).toContain("F6");
-			for (const text of ["● READY", "project", "main", "10.0%"]) expect(telemetry).not.toContain(text);
 
 			// Pi selectors replace the editor without disposing it or rendering it again.
 			const selectorFooter = footer.render(80).join("\n");
 			for (const text of ["● READY", "project", "main", "10.0%"]) expect(selectorFooter).toContain(text);
 
 			expect(editor.render(80)[0]).toContain("● READY");
-			expect(footer.render(80).join("\n")).not.toContain("● READY");
 		} finally {
 			footer.dispose();
 		}
