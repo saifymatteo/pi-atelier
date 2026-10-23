@@ -22,16 +22,23 @@ Publish releases by pushing a `fork/vX.Y.Z` tag after the release commit is on `
 
 Keep your response tone concise, technical, and straightforward. Do not include any flair or prose.
 
-## Subagent
-
-If you ever want to use subagents, kick it off with gpt-6.1-sol with high effort.
-
 ## Tests
 
 Do not write any unit tests or e2e tests associated with TUI changes. Instead, give the user a TODO list to manually verify the TUI changes. 
 
 Give the user a CLI command to open a temporal Pi agent session to check TUI changes. It should only open with the updated pi-atelier extension, otherwise there would result in a conflict with the locally installed pi-atelier. 
 
-## Other things
+## Git
 
-If you are a claude model, never mention yourself as `Co-Authored-By` in any git commit message or PR.
+- For non-trivial changes, always work on a separate git branch.
+- Always use conventional commit.
+- For non-trivial changes, ask the user whether we should open an issue or not.
+- Your issue/PR description should be concise and simple. keep it short, concrete, and worth reading.
+- Prefer `squash merge` for PRs.
+- If a PR is large (like more than thousands lines), you may prefer to separate them. You have the rights to decide.
+- If you are a Claude model, do not add a "Co-Authored-By" line to any commit message or PR description, and do not end PRs with the "Generated with Claude Code" line.
+
+## Changlog
+
+- Always update the changelog after you made changes.
+- Follow the structure in `CHANGELOG.md`.

@@ -431,7 +431,7 @@ export interface FooterRenderOptions {
 
 interface RenderedFooter {
 	line: string;
-	/** Sanitized statuses rendered on dedicated rows below the rail (complete surface only). */
+	/** Sanitized statuses rendered on dedicated rows below either footer surface. */
 	statusRows: string[];
 	/** Full-width working activity text, when the layout shows it. */
 	workingActivity: string | undefined;
@@ -452,43 +452,34 @@ function renderFooter(
 		state.activity === "working" && config.density !== "compact"
 			? items.find((footerItem) => footerItem.id === "activity")?.full
 			: undefined;
-	let placed: PlacedItem[] =
-		surface === "telemetry"
-			? (() => {
-					const { metrics } = state;
-					const available: Partial<Record<FooterItemId, boolean>> = {
-						input: metrics.usageAvailable,
-						output: metrics.usageAvailable,
-						cache:
-							metrics.cacheHitPercent !== undefined ||
-							(config.preset === "classic" && metrics.usageAvailable),
-						cost: metrics.costAvailable,
-						performance: responsePerformanceValues(state.performance).ttft.available,
-					};
-					return items
-						.filter((footerItem) => !ITEM_META[footerItem.id].header && available[footerItem.id] !== false)
-						.map((footerItem) => ({
-							...footerItem,
-							zone: footerItem.id === "performance" || footerItem.id === "menu" ? "right" : "left",
-						}));
-			  })()
-			: items
-					.filter((footerItem) => surface === "all" || ITEM_META[footerItem.id].header)
-					.map((footerItem) => ({ ...footerItem, zone: ITEM_META[footerItem.id].zone }));
-	// On the complete surface, statuses leave the rail and occupy their own rows below it.
-	let statusLines: string[] = [];
-	if (surface === "all") {
-		const railStatus = placed.find((placedItem) => placedItem.id === "status");
-		if (railStatus) {
-			placed = placed.filter((placedItem) => placedItem.id !== "status");
-			statusLines = statusRows(
-				railStatus.statuses ?? [],
-				width,
-				palette,
-				config.nerdFont ? FOOTER_ICONS.separator : PLAIN_SYMBOLS.separator,
-			);
-		}
+	let placed: PlacedItem[];
+	if (surface === "telemetry") {
+		const { metrics } = state;
+		const available: Partial<Record<FooterItemId, boolean>> = {
+			input: metrics.usageAvailable,
+			output: metrics.usageAvailable,
+			cache: metrics.cacheHitPercent !== undefined || (config.preset === "classic" && metrics.usageAvailable),
+			cost: metrics.costAvailable,
+			performance: responsePerformanceValues(state.performance).ttft.available,
+		};
+		placed = items
+			.filter((footerItem) => !ITEM_META[footerItem.id].header && available[footerItem.id] !== false)
+			.map((footerItem) => ({
+				...footerItem,
+				zone: footerItem.id === "performance" || footerItem.id === "menu" ? "right" : "left",
+			}));
+	} else {
+		placed = items
+			.filter((footerItem) => surface === "all" || ITEM_META[footerItem.id].header)
+			.map((footerItem) => ({ ...footerItem, zone: ITEM_META[footerItem.id].zone }));
 	}
+	// Keep contributed statuses below the footer, never inline in the editor header.
+	const railStatus = items.find((footerItem) => footerItem.id === "status");
+	placed = placed.filter((placedItem) => placedItem.id !== "status");
+	const statusLines =
+		surface !== "header" && railStatus
+			? statusRows(railStatus.statuses ?? [], width, palette, symbols.separator)
+			: [];
 	const line = compose(placed, width, palette, symbols.separator, surface === "header");
 	if (
 		surface === "telemetry" &&
@@ -514,7 +505,7 @@ export function renderFooterLine(
 	return renderFooter(state, config, theme, width, options).line;
 }
 
-/** Footer rows for a surface: the rail row, plus the wrapped status rows on the complete surface. */
+/** Footer rows for a surface: the rail row, plus any wrapped status rows. */
 export function renderFooterLines(
 	state: FooterState,
 	config: AtelierConfig,
@@ -569,21 +560,19 @@ export function createFooterComponent(options: FooterComponentOptions): AtelierF
 	};
 
 	const renderSurface = (width: number, surface: FooterSurface): string[] => {
-		const { line, statusRows: rows, workingActivity } = renderFooter(
-			options.getState(),
-			options.getConfig(),
-			options.theme,
-			width,
-			{
-				colorEnabled: options.colorEnabled ?? true,
-				workingDots: WORKING_DOT_FRAMES[frameIndex] ?? WORKING_DOT_FRAMES[0],
-				surface,
-			},
-		);
+		const {
+			line,
+			statusRows: rows,
+			workingActivity,
+		} = renderFooter(options.getState(), options.getConfig(), options.theme, width, {
+			colorEnabled: options.colorEnabled ?? true,
+			workingDots: WORKING_DOT_FRAMES[frameIndex] ?? WORKING_DOT_FRAMES[0],
+			surface,
+		});
 		// Animate only while the full working label is on screen; the telemetry row never shows it.
 		if (surface !== "telemetry")
 			syncAnimation(workingActivity !== undefined && line.includes(workingActivity));
-		return surface === "all" && rows.length > 0 ? [line, ...rows] : [line];
+		return rows.length > 0 ? [line, ...rows] : [line];
 	};
 
 	return {
@@ -594,8 +583,8 @@ export function createFooterComponent(options: FooterComponentOptions): AtelierF
 			return renderSurface(width, "header")[0] ?? "";
 		},
 		renderTelemetry(width) {
-			const line = renderSurface(Math.max(0, width - 4), "telemetry")[0] ?? "";
-			return visibleWidth(line) > 0 ? [`  ${line}  `] : [];
+			const [line = "", ...rows] = renderSurface(Math.max(0, width - 4), "telemetry");
+			return [...(visibleWidth(line) > 0 ? [`  ${line}  `] : []), ...rows.map((row) => `  ${row}  `)];
 		},
 		invalidate() {},
 		dispose() {

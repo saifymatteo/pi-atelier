@@ -39,6 +39,7 @@ export const DEFAULT_CONFIG: AtelierConfig = {
 	sidebarPanelLayout: cloneLayout(DEFAULT_SIDEBAR_PANEL_LAYOUT),
 	extensionStatusOrder: [],
 	completionNotifications: true,
+	showFooter: true,
 };
 
 export interface ConfigLoadResult {
@@ -64,6 +65,7 @@ const USER_ONLY_KEYS: ReadonlySet<string> = new Set([
 	"showSidebarOnStartup",
 	"completionNotifications",
 	"nerdFont",
+	"showFooter",
 ]);
 
 const isEnoent = (error: unknown): boolean => (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
@@ -337,6 +339,7 @@ function applyNonDisplay(
 		"showSidebarOnStartup",
 		"completionNotifications",
 		"nerdFont",
+		"showFooter",
 	] as const) {
 		const value = input[key];
 		if (typeof value === "boolean") {

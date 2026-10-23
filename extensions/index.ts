@@ -106,6 +106,8 @@ interface ActiveSession {
 	readonly overlayLifetime: OverlayLifetime;
 	footerDisposer: (() => void) | undefined;
 	footerGeneration: number;
+	/** Whether Atelier owns Pi's footer and composer; when false, they belong to Pi or another extension. */
+	footerInstalled: boolean;
 	unsubscribeAskUserBlocked: (() => void) | undefined;
 	askUserBlocked: boolean;
 	inputRequestSequence: number;
@@ -265,8 +267,11 @@ export default function atelierExtension(
 		session.footerGeneration += 1;
 		const footerDisposer = session.footerDisposer;
 		session.footerDisposer = undefined;
+		const installed = session.footerInstalled;
+		session.footerInstalled = false;
 		// Pi may retain the old footer when removal fails; it is disposed below regardless.
-		if (restoreHostUi) resetHostUi(session.ctx);
+		// Never reset a footer or composer that Atelier does not own.
+		if (restoreHostUi && installed) resetHostUi(session.ctx);
 		if (footerDisposer) attempt(footerDisposer);
 	}
 
@@ -356,6 +361,15 @@ export default function atelierExtension(
 		];
 	}
 
+	/** Install or remove the Atelier footer to match the `showFooter` preference. */
+	function syncFooter(targetSession: ActiveSession): void {
+		if (!enabled || activeSession !== targetSession) return;
+		const wanted = targetSession.runtime.getConfig().showFooter;
+		if (wanted === targetSession.footerInstalled) return;
+		if (wanted) installFooter(targetSession);
+		else clearFooter(targetSession, true);
+	}
+
 	async function openUsage(ctx: ExtensionContext, expected?: ActiveSession): Promise<void> {
 		const current = getActiveSession(ctx);
 		if (ctx.mode !== "tui" || !current || !enabled || (expected && current !== expected)) {
@@ -402,7 +416,11 @@ export default function atelierExtension(
 			},
 			() => requestAllRenders(current),
 			lifecycleGuardedSavePatch(current),
-			{ lifetime: current.overlayLifetime, openUsage: () => openUsage(ctx, current) },
+			{
+				lifetime: current.overlayLifetime,
+				openUsage: () => openUsage(ctx, current),
+				syncFooter: () => syncFooter(current),
+			},
 		);
 	}
 
@@ -427,11 +445,15 @@ export default function atelierExtension(
 	function installFooter(targetSession: ActiveSession): void {
 		const { ctx, token, retiredState, retiredConfig } = targetSession;
 		const generation = ++targetSession.footerGeneration;
+		targetSession.footerInstalled = true;
 		let editor: AtelierEditor | undefined;
 		let footer: AtelierFooterComponent | undefined;
+		let headerRendered = false;
+		let editorInstalled = false;
 		const detachEditor = (): void => {
 			if (editor) editor.renderStatusLine = undefined;
 			editor = undefined;
+			editorInstalled = false;
 		};
 		const getCurrentSession = (): ActiveSession | undefined => {
 			const current = activeSession;
@@ -479,7 +501,10 @@ export default function atelierExtension(
 				...component,
 				render(width) {
 					imageCompositor.sync();
-					return component.render(width);
+					// Selectors can temporarily replace the editor without disposing it.
+					const promptVisible = editorInstalled && headerRendered && editor?.statusLineVisible;
+					headerRendered = false;
+					return promptVisible ? component.renderTelemetry(width) : component.render(width);
 				},
 				dispose() {
 					try {
@@ -500,13 +525,18 @@ export default function atelierExtension(
 				const next = new AtelierEditor(tui, theme, keybindings);
 				next.renderStatusLine = (width) => {
 					// Fullscreen Pi crops the top of a tall draft after editor rendering.
-					return getCurrentSession() && tui.terminal.rows >= 12 ? (footer?.renderHeader(width) ?? "") : "";
+					// Keep essential state in the bottom footer on short terminals.
+					const line =
+						getCurrentSession() && tui.terminal.rows >= 12 ? (footer?.renderHeader(width) ?? "") : "";
+					headerRendered = Boolean(line);
+					return line;
 				};
 				editor = next;
 				return next;
 			});
+			editorInstalled = true;
 		} catch {
-			// The custom composer is optional; the Status Rail should still install.
+			// Composer framing is optional; the Status Rail should still install.
 			detachEditor();
 			// Pi may also reject restoration; leave the complete footer available.
 			attempt(() => ctx.ui.setEditorComponent(undefined));
@@ -584,7 +614,7 @@ export default function atelierExtension(
 					enabled = true;
 					current.todos = reconstructTodos(current.ctx);
 					current.runtime.setEnabled(true);
-					installFooter(current);
+					syncFooter(current);
 				}
 				ctx.ui.notify("Pi Atelier enabled", "info");
 			},
@@ -716,6 +746,7 @@ export default function atelierExtension(
 			overlayLifetime: createOverlayLifetime(token, overlayCancellations),
 			footerDisposer: undefined,
 			footerGeneration: 0,
+			footerInstalled: false,
 			unsubscribeAskUserBlocked: undefined,
 			askUserBlocked: false,
 			inputRequestSequence: 0,
@@ -777,7 +808,7 @@ export default function atelierExtension(
 			registerCustomShortcut(ctx, loaded.config.shortcut);
 			session.sidebar.setMode("manual");
 			if (enabled) {
-				installFooter(session);
+				syncFooter(session);
 				if (loaded.config.showSidebarOnStartup) session.sidebar.show();
 			}
 			void session.runtime.flushWorkspacePulseRefresh();

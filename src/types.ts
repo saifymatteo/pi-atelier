@@ -82,6 +82,7 @@ export interface AtelierConfig extends DisplaySettings {
 	sidebarPanelLayout: SidebarPanelLayout;
 	extensionStatusOrder: string[];
 	completionNotifications: boolean;
+	showFooter: boolean;
 }
 
 export interface AtelierMetrics {

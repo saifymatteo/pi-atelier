@@ -96,7 +96,9 @@ Open `/atelier` or press **F6** to change display settings, control the sidebar,
 | **minimal** | Compact layout |
 | **classic** | Detailed telemetry |
 
-Pi supports one custom footer and one custom editor at a time. Extension load order decides which one is visible. Atelier includes the copy-friendly editor behavior; disable the standalone `copy-friendly-editor.ts` when using this version, since it repeatedly replaces other custom editors.
+Pi supports one custom footer and one custom editor at a time. Extension load order decides which one is visible. To keep another extension's footer and use only the Atelier sidebar, choose **Settings → Atelier footer → Off** or set `"showFooter": false`. This also leaves Pi's composer unchanged. The sidebar does not show extension statuses while the Atelier footer is off.
+
+Atelier includes the copy-friendly editor behavior; disable the standalone `copy-friendly-editor.ts` when using this version, since it repeatedly replaces other custom editors.
 
 ## Configuration
 
@@ -105,7 +107,7 @@ Pi supports one custom footer and one custom editor at a time. Extension load or
 | User | `~/.pi/agent/pi-atelier.json` |
 | Project (trusted only) | `<project>/.pi/pi-atelier.json` |
 
-Project settings override user settings, and session changes override both. Font mode, sidebar startup, and notification preferences are user-only.
+Project settings override user settings, and session changes override both. Font mode, footer, sidebar startup, and notification preferences are user-only.
 
 ```json
 {
@@ -115,6 +117,7 @@ Project settings override user settings, and session changes override both. Font
   "density": "comfortable",
   "contextWarning": 70,
   "contextDanger": 90,
+  "showFooter": true,
   "showSidebarOnStartup": true,
   "showSidebarToolNames": false,
   "completionNotifications": true
@@ -183,7 +186,7 @@ ignore `progress`. No-color mode uses plain filled/empty blocks.
 | Problem | Fix |
 | --- | --- |
 | Shortcut does nothing | Use `/atelier`, change `shortcut`, then run `/reload`. The default is `f6` on macOS and Windows; media-key keyboards may need Fn+F6. Saved `alt+a` settings resolve to `f6` and Alt+A is no longer registered. Other custom shortcuts add a binding alongside F6. Other extensions or terminal key mappings can still intercept F6. |
-| Status rail missing | Use TUI mode and check for another extension's custom footer. |
+| Status rail missing | Use TUI mode, check **Settings → Atelier footer**, and check for another extension's custom footer. |
 | Icons render as boxes | Choose **Settings → Font mode → Plain text**, or select a Nerd Font in your terminal. |
 | Metrics disagree | Token and cost totals cover the session; context usage covers the current model context. |
 
@@ -220,7 +223,7 @@ Development stays on Pi 0.84.0 to check the minimum supported API. A scoped npm 
 
 ## Fork feature: copy-friendly editor
 
-Atelier owns the composer as well as its status header. The editor uses the full width available beside the sidebar, with one column of padding on each side and no vertical rails or corner caps. Pi's native horizontal rules, thinking-level and bash-mode colors, scroll hints, cursor handling, and autocomplete remain in place. The complete custom footer stays visible below the editor, including dedicated extension-status rows, even when the editor's status header is visible.
+Atelier owns the composer as well as its status header. The editor uses the full width available beside the sidebar, with one column of padding on each side and no vertical rails or corner caps. Pi's native horizontal rules, thinking-level and bash-mode colors, scroll hints, cursor handling, and autocomplete remain in place. As upstream, the footer shows only telemetry while the editor's status header is visible, avoiding duplicate session information. Dedicated extension-status rows remain below it. When the header cannot display, the complete footer returns.
 
 The one-column padding is fixed even if Pi reapplies its `editorPaddingX` setting. No ownership-reclaim timers or extra extension are needed. Disable the standalone `copy-friendly-editor.ts` before switching to this version; keep a renamed backup if you want to roll back.
 
@@ -235,7 +238,7 @@ pi-bolt --no-session --no-extensions -e ./extensions/index.ts
 - [ ] Type and select a multiline draft in the terminal; confirm copied text has no side-rail characters. In fullscreen mode, use your terminal's selection override (often Shift-drag).
 - [ ] Resize the terminal and toggle `/atelier sidebar`; confirm the draft fills the available area with one-column padding, wrapping and cursor movement remain aligned, and no text is clipped.
 - [ ] Open slash-command and file autocomplete; confirm suggestions remain below the bottom rule and keyboard selection still works.
-- [ ] Use a long draft, change thinking level, and enter bash mode; confirm scroll hints, border colors, and the status header survive. Confirm the complete custom footer stays visible at normal and narrow sizes, including after `/reload` and when a selector temporarily replaces the editor.
+- [ ] Use a long draft, change thinking level, and enter bash mode; confirm scroll hints, border colors, and the status header survive. Confirm session information appears only in the header while telemetry and dedicated extension statuses remain below the editor. At very narrow widths, on terminals shorter than 12 rows, and when a selector replaces the editor, confirm the complete footer returns. Repeat after `/reload`.
 - [ ] Run `/reload`, `/atelier disable`, and `/atelier enable`; confirm the native editor returns when disabled and the copy-friendly editor returns when enabled. Repeat with `--tui-mode regular`.
 
 ## Fork features: extension statuses
