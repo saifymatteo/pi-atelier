@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 — 2026-10-24
 
 - Restore upstream's telemetry-only footer while the editor status header is visible, removing duplicate session information. Keep extension statuses on dedicated rows in both footer modes, without repeating them in the header; retain the complete-footer fallback when the header cannot display.
 - Add a global **Atelier footer** setting. Turn it off in **Settings** or set `"showFooter": false` to keep Pi's or another extension's footer and composer while still using the Sidebar ([#96](https://github.com/michaelmjhhhh/pi-atelier/issues/96)).
