@@ -1,9 +1,13 @@
-import { CustomEditor } from "@earendil-works/pi-coding-agent";
-import { stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { fitToWidth } from "./text.js";
+import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import {
+	type EditorTheme,
+	stripTerminalSequences,
+	type TUI,
+	truncateToWidth,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 
-/** Width taken by the frame: a border and one column of padding on each side. */
-const EDITOR_FRAME_CHROME = 4;
+const EDITOR_PADDING_X = 1;
 export const EDITOR_FRAME_MIN_WIDTH = 6;
 const EDITOR_STATUS_MIN_WIDTH = 12;
 
@@ -13,64 +17,32 @@ export function isEditorRuleText(plain: string): boolean {
 	return plain.length > 0 && RULE_PATTERN.test(plain);
 }
 
-function expandRule(line: string, width: number): string {
-	const plain = stripTerminalSequences(line);
-	const body = isEditorRuleText(plain) ? plain : "─".repeat(visibleWidth(plain));
-	if (visibleWidth(body) >= width) return fitToWidth(body, width);
-	return `${body}${"─".repeat(width - visibleWidth(body))}`;
-}
-
-function findBottomRuleIndex(lines: readonly string[], innerWidth: number): number {
-	for (let index = lines.length - 1; index >= 1; index -= 1) {
-		const line = lines[index];
-		if (!line) continue;
-		const plain = stripTerminalSequences(line);
-		if (visibleWidth(plain) === innerWidth && isEditorRuleText(plain)) return index;
-	}
-	return Math.max(0, lines.length - 1);
-}
-
-function framedRule(
-	innerRule: string,
-	outerBodyWidth: number,
-	leftCap: string,
-	rightCap: string,
-	borderColor: (text: string) => string,
-): string {
-	return borderColor(`${leftCap}${expandRule(innerRule, outerBodyWidth)}${rightCap}`);
-}
-
-function framedRow(line: string, innerWidth: number, borderColor: (text: string) => string): string {
-	return `${borderColor("│")} ${fitToWidth(line, innerWidth)} ${borderColor("│")}`;
-}
-
 function fitsStatusLine(status: string, width: number): boolean {
 	return stripTerminalSequences(status).trim().length > 0 && visibleWidth(status) <= width;
 }
 
 function framedStatusRule(
 	innerRule: string,
-	outerBodyWidth: number,
+	width: number,
 	borderColor: (text: string) => string,
 	renderStatusLine?: (width: number) => string,
 ): string {
-	const normalRule = () => framedRule(innerRule, outerBodyWidth, "╭", "╮", borderColor);
-	if (!renderStatusLine) return normalRule();
+	if (!renderStatusLine) return innerRule;
 
 	const scrollIndicator = stripTerminalSequences(innerRule).match(/↑ \d+ more/)?.[0];
 	const scrollSuffix = scrollIndicator ? ` ${scrollIndicator} ─` : "";
-	// Reserve "─ " before the status, plus " ─" after it.
-	const statusWidth = outerBodyWidth - 4 - visibleWidth(scrollSuffix);
-	if (statusWidth < EDITOR_STATUS_MIN_WIDTH) return normalRule();
+	// Keep the existing status budget: "── " before it and " ──" after it.
+	const statusWidth = width - 6 - visibleWidth(scrollSuffix);
+	if (statusWidth < EDITOR_STATUS_MIN_WIDTH) return innerRule;
 
 	const status = renderStatusLine(statusWidth);
-	if (!fitsStatusLine(status, statusWidth)) return normalRule();
+	if (!fitsStatusLine(status, statusWidth)) return innerRule;
 
-	const remainingRule = "─".repeat(statusWidth - visibleWidth(status) + 1);
-	return `${borderColor("╭─ ")}${status}${borderColor(` ${remainingRule}${scrollSuffix}╮`)}`;
+	const remainingRule = "─".repeat(statusWidth - visibleWidth(status) + 2);
+	return `${borderColor("── ")}${status}${borderColor(` ${remainingRule}${scrollSuffix}`)}`;
 }
 
-/** Wrap Pi editor lines in a rounded frame with one column of inner padding. */
+/** Add Atelier's status header without changing native editor rows or autocomplete placement. */
 export function frameEditorLines(
 	inner: readonly string[],
 	width: number,
@@ -78,36 +50,40 @@ export function frameEditorLines(
 	renderStatusLine?: (width: number) => string,
 ): string[] {
 	const safeWidth = Math.max(0, Math.trunc(width));
-	const [topRule, ...rest] = inner;
-	if (safeWidth < EDITOR_FRAME_MIN_WIDTH || topRule === undefined) {
-		return inner.map((line) => truncateToWidth(line, safeWidth, ""));
+	const lines = inner.map((line) => truncateToWidth(line, safeWidth, ""));
+	const topRule = lines[0];
+	if (
+		safeWidth >= EDITOR_FRAME_MIN_WIDTH &&
+		topRule !== undefined &&
+		isEditorRuleText(stripTerminalSequences(topRule))
+	) {
+		lines[0] = framedStatusRule(topRule, safeWidth, borderColor, renderStatusLine);
 	}
-
-	const innerWidth = safeWidth - EDITOR_FRAME_CHROME;
-	const outerBodyWidth = safeWidth - 2;
-	const bottom = findBottomRuleIndex(inner, innerWidth);
-	const body = rest.filter((_, index) => index + 1 !== bottom);
-	return [
-		framedStatusRule(topRule, outerBodyWidth, borderColor, renderStatusLine),
-		...body.map((line) => framedRow(line, innerWidth, borderColor)),
-		framedRule(inner[bottom] ?? topRule, outerBodyWidth, "╰", "╯", borderColor),
-	].map((line) => truncateToWidth(line, safeWidth, ""));
+	return lines;
 }
 
-/** Pi composer with Atelier's rounded frame. Preserves thinking-level borderColor. */
+/** Full-width, copy-friendly composer. Preserves Pi's editing behavior and border colors. */
 export class AtelierEditor extends CustomEditor {
-	/** Optional ANSI status content for the top frame; receives its available column width. */
+	/** Optional ANSI status content for the top rule; receives its available column width. */
 	renderStatusLine: ((width: number) => string) | undefined;
-	/** Whether the most recent render included the status line in its top frame. */
+	/** Whether the most recent render included the status line in its top rule. */
 	statusLineVisible = false;
+
+	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager) {
+		super(tui, theme, keybindings, { paddingX: EDITOR_PADDING_X });
+	}
+
+	override setPaddingX(_padding: number): void {
+		// Pi reapplies editorPaddingX when installing or updating the editor.
+		super.setPaddingX(EDITOR_PADDING_X);
+	}
 
 	override render(width: number): string[] {
 		this.statusLineVisible = false;
 		const safeWidth = Math.max(0, Math.trunc(width));
-		if (safeWidth < EDITOR_FRAME_MIN_WIDTH) return super.render(safeWidth);
 		const renderStatusLine = this.renderStatusLine;
 		return frameEditorLines(
-			super.render(safeWidth - EDITOR_FRAME_CHROME),
+			super.render(safeWidth),
 			safeWidth,
 			this.borderColor,
 			renderStatusLine

@@ -517,7 +517,7 @@ export default function atelierExtension(
 			});
 			editorInstalled = true;
 		} catch {
-			// Composer framing is optional; the Status Rail should still install.
+			// The custom composer is optional; the Status Rail should still install.
 			detachEditor();
 			// Pi may also reject restoration; leave the complete footer available.
 			attempt(() => ctx.ui.setEditorComponent(undefined));

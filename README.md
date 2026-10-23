@@ -56,6 +56,7 @@ Plain text mode works with any monospace font and keeps colors, metrics, and the
 | **Live activity** | Agent and tool activity, TODOs, response timing, and completion notifications on macOS and Windows. |
 | **Workspace context** | Workspace identity and read-only Git status next to your session. |
 | **Subagent costs** | Colored per-child cost curves from pi-subagents accounting events, with matching legends and real observation markers. `/atelier usage` opens a larger framed graph with keyboard focus and per-reply costs. Kitty-compatible terminals get native graphics; others get text strokes. |
+| **Copy-friendly editor** | Full available width with one-column horizontal padding, no vertical side rails, and the session status header retained above the draft. |
 | **Personalization** | Display presets, configurable segments and panels, optional Nerd Font icons, and model and tool controls. |
 | **Extensible sidebar** | Other extensions can add their own panels. See [Sidebar panels from other extensions](#sidebar-panels-from-other-extensions). |
 
@@ -95,7 +96,7 @@ Open `/atelier` or press **F6** to change display settings, control the sidebar,
 | **minimal** | Compact layout |
 | **classic** | Detailed telemetry |
 
-Pi supports one custom footer and one custom editor at a time. Extension load order decides which one is visible.
+Pi supports one custom footer and one custom editor at a time. Extension load order decides which one is visible. Atelier includes the copy-friendly editor behavior; disable the standalone `copy-friendly-editor.ts` when using this version, since it repeatedly replaces other custom editors.
 
 ## Configuration
 
@@ -216,6 +217,26 @@ The last command opens a temporary session with only the checkout's extension lo
 Development stays on Pi 0.84.0 to check the minimum supported API. A scoped npm override patches that host's pinned `undici` dependency to 8.10.2. Remove the override when the development baseline moves to a compatible Pi release with patched `undici`. Root overrides do not apply to consumers or update their Pi hosts.
 
 </details>
+
+## Fork feature: copy-friendly editor
+
+Atelier owns the composer as well as its status header. The editor uses the full width available beside the sidebar, with one column of padding on each side and no vertical rails or corner caps. Pi's native horizontal rules, thinking-level and bash-mode colors, scroll hints, cursor handling, and autocomplete remain in place. On narrow or short terminals, the complete footer remains the fallback for status information.
+
+The one-column padding is fixed even if Pi reapplies its `editorPaddingX` setting. No ownership-reclaim timers or extra extension are needed. Disable the standalone `copy-friendly-editor.ts` before switching to this version; keep a renamed backup if you want to roll back.
+
+### Manual editor verification TODO
+
+From the repository root, open an in-memory session with only this checkout's extension:
+
+```bash
+pi-bolt --no-session --no-extensions -e ./extensions/index.ts
+```
+
+- [ ] Type and select a multiline draft in the terminal; confirm copied text has no side-rail characters. In fullscreen mode, use your terminal's selection override (often Shift-drag).
+- [ ] Resize the terminal and toggle `/atelier sidebar`; confirm the draft fills the available area with one-column padding, wrapping and cursor movement remain aligned, and no text is clipped.
+- [ ] Open slash-command and file autocomplete; confirm suggestions remain below the bottom rule and keyboard selection still works.
+- [ ] Use a long draft, change thinking level, and enter bash mode; confirm scroll hints, border colors, and the status header survive. Shrink the terminal to confirm the complete-footer fallback.
+- [ ] Run `/reload`, `/atelier disable`, and `/atelier enable`; confirm the native editor returns when disabled and the copy-friendly editor returns when enabled. Repeat with `--tui-mode regular`.
 
 ## Fork features: extension statuses
 

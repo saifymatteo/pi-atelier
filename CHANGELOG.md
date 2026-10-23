@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Integrate the copy-friendly editor into Atelier: use the full available width with fixed one-column padding and no vertical side rails, while retaining the status header, native horizontal rules, scroll hints, and autocomplete placement. Disable the standalone `copy-friendly-editor.ts` to avoid competing editor ownership.
+
 ## 0.17.0 — 2026-10-22
 
 - Add JSON-configurable ordering of individual custom-extension statuses through `extensionStatusOrder`, using exact `setStatus()` keys. Listed statuses appear first, while unlisted statuses retain Pi's order. Trusted project configuration can override the user list.
