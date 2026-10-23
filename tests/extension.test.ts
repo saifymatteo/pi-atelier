@@ -58,7 +58,6 @@ describe("extension registration", () => {
 			{ matches: () => false },
 		);
 		expect(editor).toBeInstanceOf(AtelierEditor);
-		expect(editor.render(32)[0]).toMatch(/^╭─+╮$/);
 		expect(h.shortcuts).toContain("f6");
 		expect(h.shortcuts).toContain("ctrl+shift+r");
 	});

@@ -1,6 +1,6 @@
 {
 	"name": "@saifymatteo/pi-atelier",
-	"version": "0.17.0",
+	"version": "0.18.0",
 	"description": "A responsive status rail and live activity sidebar for Pi",
 	"type": "module",
 	"license": "MIT",
@@ -68,7 +68,7 @@
 		"@earendil-works/pi-tui": "0.84.0",
 		"@types/node": "24.12.4",
 		"typescript": "5.9.3",
-		"vitest": "4.1.11"
+		"vitest": "4.1.12"
 	},
 	"overrides": {
 		"@earendil-works/pi-coding-agent@0.84.0": {

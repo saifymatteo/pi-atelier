@@ -8,12 +8,12 @@ import {
 } from "@earendil-works/pi-tui";
 
 const EDITOR_PADDING_X = 1;
-export const EDITOR_FRAME_MIN_WIDTH = 6;
+const EDITOR_FRAME_MIN_WIDTH = 6;
 const EDITOR_STATUS_MIN_WIDTH = 12;
 
 const RULE_PATTERN = /^─+(?: [↑↓] \d+ more ─*)?\.{0,3}$/;
 
-export function isEditorRuleText(plain: string): boolean {
+function isEditorRuleText(plain: string): boolean {
 	return plain.length > 0 && RULE_PATTERN.test(plain);
 }
 
@@ -43,7 +43,7 @@ function framedStatusRule(
 }
 
 /** Add Atelier's status header without changing native editor rows or autocomplete placement. */
-export function frameEditorLines(
+function frameEditorLines(
 	inner: readonly string[],
 	width: number,
 	borderColor: (text: string) => string,

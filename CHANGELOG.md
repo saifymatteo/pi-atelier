@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 — 2026-10-23
 
 - Integrate the copy-friendly editor into Atelier: use the full available width with fixed one-column padding and no vertical side rails, while retaining the status header, native horizontal rules, scroll hints, and autocomplete placement. Disable the standalone `copy-friendly-editor.ts` to avoid competing editor ownership.
+- Retire obsolete boxed-editor rendering tests and test-only helper exports. Keep editor registration, lifecycle, and complete-footer fallback coverage; use the README checklist for manual TUI verification.
+- Update development-only Vitest to 4.1.12 to resolve the manual mock registration and Windows redirect-allowlist advisories. The published extension still has no runtime dependencies.
 
 ## 0.17.0 — 2026-10-22
 
