@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.19.1 — 2026-11-01
+
+- Merge upstream v0.18.0, including Prefill progress, provider-error activity state, full TODO results, and response TPS accuracy fixes.
+- Preserve Atelier fork identity and copy-friendly editor integration.
+
 ## 0.18.0 — 2026-10-31
 
 - Show a temporary Sidebar **Prefill** panel while a local model is still reading a long prompt: a bar over the uncached prompt tokens, the token counts, the reading speed, and an estimate of how long until the first token. A long prefill used to look exactly like a hang. The panel is present only while prefilling and reserves nothing when it is absent. Configure with `prefillEnabled`, `prefillViews`, and the user-only `prefillProviders` allow-list, or toggle it in Control Center → Settings. Needs Pi 0.99 or newer to report progress; on an older Pi the panel never appears.
