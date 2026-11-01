@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.2 — 2026-11-01
 
 - Rewrite the README to fork scope: credit upstream for the original work and link its README, document only this fork's changes (dedicated extension-status rows, `extensionStatusOrder`, the copy-friendly editor, footer coexistence, and packaging), and point installation at `@saifymatteo/pi-atelier`. Upstream merges had twice restored the upstream README over this file; future syncs should preserve it.
 
