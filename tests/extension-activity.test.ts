@@ -10,6 +10,7 @@ import {
 	renderOverlayText,
 	queueWorkspacePulseInspection,
 	execResult,
+	mountComposer,
 } from "./helpers/extension.js";
 
 describe("extension activity", () => {
@@ -174,7 +175,7 @@ describe("extension activity", () => {
 		vi.setSystemTime(2_920);
 		await h.dispatch("message_update", {
 			type: "message_update",
-			message: { role: "assistant", content: [{ type: "text", text: "x".repeat(80) }] },
+			message: { role: "assistant", content: [{ type: "text", text: "x".repeat(88) }] },
 			assistantMessageEvent: { type: "text_delta", delta: "more output" },
 		});
 		expect(footer.render(160).join("\n")).toContain("\uf017 820ms  \uf0e7 ~20.0/s");
@@ -183,10 +184,11 @@ describe("extension activity", () => {
 		vi.setSystemTime(4_420);
 		await h.dispatch("message_end", {
 			type: "message_end",
-			message: { role: "assistant", usage: { output: 120 } },
+			message: { role: "assistant", usage: { output: 110 } },
 		});
-		expect(footer.render(160).join("\n")).toContain("\uf017 820ms  \uf0e7 48.0/s");
-		expect(renderOverlayText(h)).toMatch(/Output speed\s+48\.0 tok\/s/);
+		// The first chunk holds 2 of 22 estimated tokens, so 100 of 110 fall in the 2.5s window.
+		expect(footer.render(160).join("\n")).toContain("\uf017 820ms  \uf0e7 40.0/s");
+		expect(renderOverlayText(h)).toMatch(/Output speed\s+40\.0 tok\/s/);
 		workspace.handleInput("\u001b");
 		await opening;
 	});
@@ -343,5 +345,55 @@ describe("extension activity", () => {
 		expect(text).toContain("Working");
 		expect(text).toContain("ACTIVITY");
 		expect(text).toContain("Turn 1");
+	});
+
+	describe("provider error state", () => {
+		const providerError = {
+			type: "turn_end",
+			message: { role: "assistant", stopReason: "error" },
+			toolResults: [],
+		};
+
+		async function settledStatus(h: ReturnType<typeof harness>, turnEnd: unknown): Promise<string> {
+			await h.dispatch("agent_start", { type: "agent_start" });
+			await h.dispatch("turn_end", turnEnd);
+			await h.dispatch("agent_settled", { type: "agent_settled" });
+			const { editor, footer } = mountComposer(h);
+			try {
+				return editor.render(80)[0] ?? "";
+			} finally {
+				footer.dispose();
+			}
+		}
+
+		it("keeps the error state after a run ends in a provider error", async () => {
+			const h = harness();
+			await start(h);
+
+			expect(await settledStatus(h, providerError)).toContain("× ERROR");
+			expect(await settledStatus(h, { type: "turn_end" })).toContain("● READY");
+		});
+
+		it("settles to ready when the user aborted the run", async () => {
+			const h = harness();
+			await start(h);
+			const controller = new AbortController();
+			controller.abort();
+			Object.assign(h.ctx, { signal: controller.signal });
+
+			expect(await settledStatus(h, providerError)).toContain("● READY");
+		});
+
+		it("settles to ready after a recovered tool failure", async () => {
+			const h = harness();
+			await start(h);
+
+			const status = await settledStatus(h, {
+				type: "turn_end",
+				message: { role: "assistant", stopReason: "stop" },
+				toolResults: [{ isError: true }],
+			});
+			expect(status).toContain("● READY");
+		});
 	});
 });

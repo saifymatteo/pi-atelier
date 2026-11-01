@@ -41,9 +41,7 @@ export function displayPathWithin(base: string, target: string): string | undefi
 export function displayHomePath(path: string): string {
 	const pathApi = pathApiFor(path);
 	const home = pathApi === nodePath.posix ? (process.env.HOME ?? homedir()) : homedir();
-	const withinHome = home
-		? displayPathWithin(pathApi.resolve(home), pathApi.resolve(path))
-		: undefined;
+	const withinHome = home ? displayPathWithin(pathApi.resolve(home), pathApi.resolve(path)) : undefined;
 	if (withinHome === undefined) return toDisplayPath(path, pathApi.sep);
 	return withinHome === "." ? "~" : `~/${withinHome}`;
 }

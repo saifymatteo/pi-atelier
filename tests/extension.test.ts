@@ -102,6 +102,33 @@ describe("extension registration", () => {
 		await opening;
 	});
 
+	it("toggles the sidebar with the configured toggleShortcut", async () => {
+		const h = harness();
+		await withPersistedUserConfig({ toggleShortcut: "ctrl+shift+b" }, async () => {
+			await start(h);
+		});
+		expect(h.shortcuts).toContain("ctrl+shift+b");
+		await h.shortcutHandlers.get("ctrl+shift+b")?.(h.ctx);
+		expect(h.ctx.ui.notify).toHaveBeenLastCalledWith("Sidebar: Manual · hidden", "info");
+		await h.shortcutHandlers.get("ctrl+shift+b")?.(h.ctx);
+		expect(h.ctx.ui.notify).toHaveBeenLastCalledWith("Sidebar: Manual", "info");
+	});
+
+	it.each(["f6", "ctrl+shift+r", "shift+ctrl+r", "alt+x"])(
+		"rejects a toggleShortcut that reuses an Atelier key: %s",
+		async (key) => {
+			const h = harness();
+			await withPersistedUserConfig({ shortcut: "alt+x", toggleShortcut: key }, async () => {
+				await start(h);
+			});
+			expect(h.ctx.ui.notify).toHaveBeenCalledWith(
+				`toggleShortcut "${key}" is already an Atelier shortcut`,
+				"warning",
+			);
+			expect(h.shortcuts).toEqual(["f6", "ctrl+shift+r", "alt+x"]);
+		},
+	);
+
 	it("does not install terminal UI outside TUI mode", async () => {
 		const h = harness("print");
 		await start(h);
@@ -371,8 +398,8 @@ describe("extension registration", () => {
 				const rendered = workspace?.render(120).join("\n") ?? "";
 				expect(rendered).toContain("vendor:missing");
 
-				// Two display rows, nine segments, and three actions precede configured panels.
-				for (let index = 0; index < 14 + 10; index += 1) workspace?.handleInput("\u001b[B");
+				// Two display rows, nine segments, three actions and ten built-in panels precede the contributed one.
+				for (let index = 0; index < 14 + 11; index += 1) workspace?.handleInput("\u001b[B");
 				const focusedRendered = workspace?.render(120).join("\n") ?? "";
 				expect(focusedRendered).toContain("Queue title");
 				expect(focusedRendered).toContain("unavailable");
@@ -396,6 +423,7 @@ describe("extension registration", () => {
 					"alerts",
 					"todos",
 					"context",
+					"prefill",
 					"workspace",
 					"usage",
 					"subagents",

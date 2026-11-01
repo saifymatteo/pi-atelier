@@ -475,7 +475,13 @@ export function createSettingsWorkspace(options: SettingsWorkspaceOptions): Sett
 			{ colorEnabled: options.colorEnabled ?? true },
 		).map((line) => `  ${line}`);
 		const preview = [
-			...panel("Preview", previewLines.map((line) => ({ line })), outerInner, theme, true),
+			...panel(
+				"Preview",
+				previewLines.map((line) => ({ line })),
+				outerInner,
+				theme,
+				true,
+			),
 			{ line: "" },
 			...panel(
 				"Sidebar Preview",

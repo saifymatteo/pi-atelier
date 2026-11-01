@@ -1,11 +1,13 @@
 import type { DENSITIES, PRODUCT_SEGMENT_ORDER, TEMPLATE_NAMES } from "./display.js";
 import type { BUILTIN_SIDEBAR_PANEL_IDS } from "./sidebar-panels.js";
+import type { PrefillView } from "./prefill.js";
 import type { SubagentUsageSnapshot } from "./subagent-usage.js";
 import type { WorkspacePulseData } from "./workspace-pulse.js";
 
+export type { PrefillView };
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 export type PresetName = TemplateName | "custom";
-export type ActivityState = "ready" | "working";
+export type ActivityState = "ready" | "working" | "error";
 export type SegmentId = (typeof PRODUCT_SEGMENT_ORDER)[number];
 export type Density = (typeof DENSITIES)[number];
 export type BuiltinSidebarPanelId = (typeof BUILTIN_SIDEBAR_PANEL_IDS)[number];
@@ -74,15 +76,24 @@ export interface DisplayValue {
 export interface AtelierConfig extends DisplaySettings {
 	nerdFont: boolean;
 	shortcut: string;
+	/** Optional key that toggles the sidebar directly; empty means no binding. */
+	toggleShortcut: string;
 	contextWarning: number;
 	contextDanger: number;
 	currencyDecimals: number;
 	showSidebarToolNames: boolean;
 	showSidebarOnStartup: boolean;
+	/** Sidebar width in columns when a session starts. */
+	sidebarWidth: number;
 	sidebarPanelLayout: SidebarPanelLayout;
 	extensionStatusOrder: string[];
 	completionNotifications: boolean;
 	showFooter: boolean;
+	prefillEnabled: boolean;
+	/** Which prefill numbers the PREFILL panel shows; the bar itself is always drawn. */
+	prefillViews: readonly PrefillView[];
+	/** Providers allowed to have `return_progress` injected into their request body. */
+	prefillProviders: readonly string[];
 }
 
 export interface AtelierMetrics {

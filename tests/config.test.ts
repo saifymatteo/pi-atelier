@@ -22,10 +22,49 @@ describe("configuration validation", () => {
 		}
 	});
 
+	it("parses the optional sidebar toggle shortcut", () => {
+		expect(DEFAULT_CONFIG.toggleShortcut).toBe("");
+		expect(validateConfig({ toggleShortcut: " ctrl+shift+b " }).config.toggleShortcut).toBe("ctrl+shift+b");
+		expect(
+			resolveConfig({ user: { toggleShortcut: "ctrl+shift+b" }, project: { toggleShortcut: "" } }).config
+				.toggleShortcut,
+		).toBe("");
+		const invalid = validateConfig({ toggleShortcut: 1 });
+		expect(invalid.config.toggleShortcut).toBe("");
+		expect(invalid.warnings).toContain("toggleShortcut must be a string");
+	});
+
+	it("parses the user-only sidebar width", () => {
+		expect(DEFAULT_CONFIG.sidebarWidth).toBe(44);
+		expect(validateConfig({ sidebarWidth: 36 }).config.sidebarWidth).toBe(36);
+		const clamped = validateConfig({ sidebarWidth: 10 });
+		expect(clamped.config.sidebarWidth).toBe(28);
+		expect(clamped.warnings).toContain("sidebarWidth must be from 28 through 72; using 28");
+		const invalid = validateConfig({ sidebarWidth: 40.5 });
+		expect(invalid.config.sidebarWidth).toBe(44);
+		expect(invalid.warnings).toContain("sidebarWidth must be an integer");
+		expect(
+			resolveConfig({ user: { sidebarWidth: 36 }, project: { sidebarWidth: 60 } }).config.sidebarWidth,
+		).toBe(36);
+	});
+
 	it("keeps legacy Sidebar visibility compatible when no authoritative layout is present", () => {
 		const result = validateConfig({ showSidebarAgent: false, showSidebarTodos: false });
 		expect(result.config.sidebarPanelLayout.find((entry) => entry.id === "agent")?.visible).toBe(false);
 		expect(result.config.sidebarPanelLayout.find((entry) => entry.id === "todos")?.visible).toBe(false);
+	});
+
+	it("places a panel that a saved Sidebar layout predates next to its product-order neighbour", () => {
+		const saved = ["agent", "activity", "context", "vendor:queue", "workspace", "usage"].map((id) => ({
+			id,
+			visible: true,
+		}));
+		const layout = validateConfig({ sidebarPanelLayout: saved }).config.sidebarPanelLayout;
+		const ids = layout.map((entry) => entry.id);
+		expect(ids.slice(ids.indexOf("context"), ids.indexOf("context") + 2)).toEqual(["context", "prefill"]);
+		expect(ids.indexOf("prefill")).toBeLessThan(ids.indexOf("vendor:queue"));
+		expect(ids.indexOf("vendor:queue")).toBeLessThan(ids.indexOf("workspace"));
+		expect(ids.indexOf("tools")).toBe(ids.length - 1);
 	});
 
 	it("applies named templates atomically before same-layer deviations", () => {
@@ -251,5 +290,56 @@ describe("configuration files", () => {
 			futureSetting: "keep",
 			completionNotifications: false,
 		});
+	});
+
+	it("keeps every field when patches are saved concurrently", async () => {
+		await writeJson(userPath, { futureSetting: "keep" });
+		await Promise.all([
+			saveUserConfigPatch(userPath, { sidebarWidth: 36 }),
+			saveUserConfigPatch(userPath, { completionNotifications: false }),
+			saveUserConfigPatch(userPath, { nerdFont: false }),
+		]);
+		expect(JSON.parse(await readFile(userPath, "utf8"))).toEqual({
+			futureSetting: "keep",
+			sidebarWidth: 36,
+			completionNotifications: false,
+			nerdFont: false,
+		});
+	});
+
+	it("defaults prefill to a llama.cpp-only panel with four distinct views", () => {
+		expect(DEFAULT_CONFIG).toMatchObject({
+			prefillEnabled: true,
+			prefillViews: ["percent", "tokens", "eta", "rate"],
+			prefillProviders: ["llama.cpp"],
+		});
+		// A view repeated in the default list would draw the same row twice.
+		expect(new Set(DEFAULT_CONFIG.prefillViews).size).toBe(DEFAULT_CONFIG.prefillViews.length);
+	});
+
+	it("keeps the known prefill views and warns about the rest", () => {
+		const known = validateConfig({ prefillViews: ["tokens", "rate", "eta"] });
+		expect(known.config.prefillViews).toEqual(["tokens", "rate", "eta"]);
+		expect(known.warnings).toEqual([]);
+
+		const unknown = validateConfig({ prefillViews: ["tokens", "tps"] });
+		expect(unknown.config.prefillViews).toEqual(["tokens"]);
+		expect(unknown.warnings).toContain("Unknown prefillViews: tps");
+
+		const malformed = validateConfig({ prefillViews: "percent" });
+		expect(malformed.config.prefillViews).toEqual(DEFAULT_CONFIG.prefillViews);
+		expect(malformed.warnings).toContain("prefillViews must be an array");
+	});
+
+	it("keeps prefillProviders as a global user preference", async () => {
+		await writeJson(userPath, { prefillProviders: ["llama.cpp"] });
+		await writeJson(projectPath, { prefillProviders: ["vllm"] });
+		const result = await loadConfig({
+			userPath,
+			projectPath,
+			projectTrusted: true,
+			session: { prefillProviders: ["strata"] },
+		});
+		expect(result.config.prefillProviders).toEqual(["llama.cpp"]);
 	});
 });

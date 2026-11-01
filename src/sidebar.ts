@@ -4,6 +4,7 @@ import { type Component, type OverlayHandle, truncateToWidth, visibleWidth } fro
 import { DEFAULT_CONFIG } from "./config.js";
 import { displayHomePath } from "./display-path.js";
 import { contextRole } from "./footer.js";
+import { type PrefillSnapshot, formatPrefillRows } from "./prefill.js";
 import { hasCapturingOverlay } from "./image-compositor.js";
 import { formatTokens } from "./metrics.js";
 import { type AtelierPalette, createPalette, type PaletteRole, type ThemeLike } from "./palette.js";
@@ -40,6 +41,8 @@ export interface SidebarSnapshotInput {
 	runActivity?: RunActivitySnapshot;
 	todos?: readonly NormalizedTodo[];
 	sidebarPanels?: readonly SidebarPanelData[];
+	/** Live prefill progress for the current provider request; absent whenever nothing is prefilling. */
+	prefill?: PrefillSnapshot;
 }
 
 export interface SidebarSnapshot extends AtelierState {
@@ -54,6 +57,7 @@ export interface SidebarSnapshot extends AtelierState {
 	runActivity: RunActivitySnapshot;
 	todos: readonly NormalizedTodo[];
 	sidebarPanels: readonly SidebarPanelData[];
+	prefill?: PrefillSnapshot;
 }
 
 function workspacePulseData(pulse: WorkspacePulseState): WorkspacePulseData | undefined {
@@ -78,6 +82,7 @@ export function buildSidebarSnapshot(input: SidebarSnapshotInput): SidebarSnapsh
 		runActivity: input.runActivity ?? EMPTY_RUN_ACTIVITY,
 		todos: input.todos ?? [],
 		sidebarPanels: input.sidebarPanels ?? [],
+		...(input.prefill ? { prefill: input.prefill } : {}),
 	};
 }
 
@@ -161,11 +166,12 @@ function agentRows(
 	theme: ThemeLike,
 ): string[] {
 	const working = snapshot.activity === "working";
-	const label = working ? "Working" : "Ready";
+	const failed = snapshot.activity === "error";
+	const label = working ? "Working" : failed ? "Error" : "Ready";
 	const phrase = working && snapshot.workingLabel ? ` · ${sanitizeInline(snapshot.workingLabel)}` : "";
 	const knownModel = Boolean(snapshot.modelId || snapshot.provider);
 	return [
-		theme.bold(palette.paint(snapshot.activity, `${working ? "◆" : "●"} ${label}${phrase}`)),
+		theme.bold(palette.paint(snapshot.activity, `${working ? "◆" : failed ? "×" : "●"} ${label}${phrase}`)),
 		theme.bold(valueRow(snapshot.modelId, palette, "primary")),
 		valueRow(snapshot.provider, palette, "muted"),
 		labeledRow(
@@ -281,6 +287,29 @@ function progressMeter(
 	const fraction = units % 8;
 	const fill = "█".repeat(full) + (fraction ? "▏▎▍▌▋▊▉"[fraction - 1] : "");
 	return `${palette.paint(role, fill)}${palette.paint("dim", "░".repeat(meterWidth - full - (fraction ? 1 : 0)))}`;
+}
+
+/** The transient PREFILL panel: the same bar CONTEXT uses, plus the queued-token rows. */
+function prefillRows(
+	snapshot: SidebarSnapshot,
+	config: AtelierConfig,
+	width: number,
+	palette: AtelierPalette,
+	theme: ThemeLike,
+): string[] {
+	const prefill = snapshot.prefill;
+	if (!prefill) return [];
+	const percentText = config.prefillViews.includes("percent") ? `${Math.round(prefill.percent * 100)}%` : "";
+	const percentWidth = percentText ? visibleWidth(percentText) : 0;
+	const meterWidth = Math.max(0, width - percentWidth - (percentText ? 2 : 0));
+	const meter = progressMeter(prefill.percent * 100, meterWidth, palette, "working");
+	const percentage = theme.bold(palette.paint("working", percentText));
+	return [
+		percentText && meterWidth > 0 ? `${meter}  ${percentage}` : percentText || meter,
+		...formatPrefillRows(prefill, config.prefillViews).map((row) =>
+			labeledRow(row.label, row.value, width, palette, "primary", "muted"),
+		),
+	];
 }
 
 /** Usage counts keep one decimal (and reach billions) where the rail rounds harder. */
@@ -460,9 +489,9 @@ function toolActivityRow(
 	return truncateToWidth(row, contentWidth, "");
 }
 
-function runPhaseRole(activity: RunActivitySnapshot): PaletteRole {
+function runPhaseRole(activity: RunActivitySnapshot, failed = false): PaletteRole {
 	if (activity.phase === "running") return "working";
-	return activity.failedCount > 0 ? "error" : "chartGreen";
+	return failed || activity.failedCount > 0 ? "error" : "chartGreen";
 }
 
 function runSummaryRow(
@@ -528,6 +557,9 @@ const DROP_RANK = {
 	activeTool: 75,
 	alerts: 80,
 	todos: 90,
+	/** Transient panel with a row cap: it outranks every optional panel, so a short terminal
+	 * loses Workspace or TODOs before it loses the one thing the user is waiting for. */
+	prefill: 100,
 	required: Number.POSITIVE_INFINITY,
 } as const;
 
@@ -721,7 +753,7 @@ export function renderSidebarLines(
 			activityGroups(snapshot, panelWidth, palette, now, {
 				id: "activity",
 				title: "ACTIVITY",
-				role: runPhaseRole(snapshot.runActivity),
+				role: runPhaseRole(snapshot.runActivity, snapshot.activity === "error"),
 			}),
 		alerts: () => [
 			{
@@ -755,6 +787,19 @@ export function renderSidebarLines(
 				dropRank: DROP_RANK.required,
 			},
 		],
+		prefill: () => {
+			const rows = prefillRows(snapshot, config, panelWidth, palette, theme);
+			if (rows.length === 0) return [];
+			return [
+				{
+					name: "prefill",
+					panel: { id: "prefill", title: "PREFILL", role: "working" },
+					rows,
+					// Transient, but the last optional group to go while it is shown.
+					dropRank: DROP_RANK.prefill,
+				},
+			];
+		},
 		workspace: () => {
 			const panel = { id: "workspace", title: "WORKSPACE", role: "accent" } as const;
 			const pulseData = workspacePulseData(snapshot.workspacePulse);
@@ -982,6 +1027,10 @@ export interface SidebarControllerOptions {
 	getConfig(): AtelierConfig;
 	colorEnabled?: boolean;
 	shouldAnimate?(): boolean;
+	/** Preferred sidebar width when the session starts. */
+	initialWidth?: number;
+	/** A confirmed resize changed the preferred width. */
+	onResizeCommit?(width: number): void;
 	onWarning?(message: string): void;
 	onError?(error: unknown): void;
 }
@@ -1056,11 +1105,13 @@ export function createSidebarController(options: SidebarControllerOptions): Side
 	};
 
 	const split = createSplitPaneController({
+		...(options.initialWidth === undefined ? {} : { initialWidth: options.initialWidth }),
 		subscribeInput: (handler) => options.ctx.ui.onTerminalInput(handler),
 		onVisibilityChange: () => syncAnimation(),
 		onResizeChange: () => {
 			safely(() => requestOverlayRender?.());
 		},
+		...(options.onResizeCommit ? { onResizeCommit: options.onResizeCommit } : {}),
 		...(options.onWarning ? { onWarning: options.onWarning } : {}),
 		...(options.onError ? { onError: options.onError } : {}),
 	});

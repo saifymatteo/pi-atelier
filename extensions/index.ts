@@ -20,6 +20,13 @@ import { type AtelierFooterComponent, createFooterComponent } from "../src/foote
 import { createImageCompositorBinding } from "../src/image-compositor.js";
 import { openAtelierControlCenter, openDisplaySettingsWorkspace, sidebarStatusLabel } from "../src/menu.js";
 import type { OverlayLifetime } from "../src/overlay-lifecycle.js";
+import {
+	createPrefillThrottle,
+	createPrefillTracker,
+	OPENAI_COMPLETIONS_API,
+	type PrefillThrottle,
+	type PrefillTracker,
+} from "../src/prefill.js";
 import { createRunActivityTracker, type RunActivityTracker } from "../src/run-activity.js";
 import type { SidebarPanelSetting } from "../src/settings-workspace.js";
 import {
@@ -83,6 +90,34 @@ export type {
 	SidebarPanelLayoutEntry,
 } from "../src/types.js";
 
+/**
+ * `provider_stream_event` only exists from Pi 0.99, while the pinned devDependency is older, so
+ * registration goes through a narrow local shape. On a Pi that never emits the event the handler
+ * simply stays inert. Pi emits it as `{ type, provider, api, model, data }`, where `data` is the
+ * raw parsed stream chunk — for `openai-completions` that is the chunk object itself, carrying
+ * `prompt_progress` when the request asked for it. Pi 0.99 also returns an unsubscribe from `on`,
+ * which the pinned types do not declare.
+ */
+interface ProviderStreamEventLike {
+	readonly api?: string;
+	readonly data: unknown;
+}
+
+/** Start listening for provider stream chunks and return the way to stop. */
+function registerProviderStreamHandler(
+	pi: ExtensionAPI,
+	handler: (event: ProviderStreamEventLike, ctx: ExtensionContext) => void,
+): () => void {
+	const capable = pi as ExtensionAPI & {
+		on(
+			event: "provider_stream_event",
+			handler: (event: ProviderStreamEventLike, ctx: ExtensionContext) => void,
+		): (() => void) | void;
+	};
+	const unsubscribe = capable.on("provider_stream_event", handler);
+	return typeof unsubscribe === "function" ? unsubscribe : (): void => undefined;
+}
+
 export interface AtelierExtensionDependencies {
 	loadConfig?: typeof loadConfig;
 	saveConfigPatch?: typeof saveUserConfigPatch;
@@ -98,6 +133,9 @@ interface ActiveSession {
 	readonly sidebar: SidebarController;
 	readonly panelRegistry: SidebarPanelRegistry;
 	readonly runActivity: RunActivityTracker;
+	/** Live prefill progress for the current provider request, plus the render coalescing it needs. */
+	readonly prefill: PrefillTracker;
+	readonly prefillThrottle: PrefillThrottle;
 	readonly completionNotifier: CompletionNotifier;
 	readonly retiredState: AtelierState;
 	readonly retiredConfig: AtelierConfig;
@@ -112,6 +150,8 @@ interface ActiveSession {
 	askUserBlocked: boolean;
 	inputRequestSequence: number;
 	todos: NormalizedTodo[];
+	/** Whether the latest Turn ended in a provider error that the user did not abort. */
+	providerFailed: boolean;
 	requestFooterRender: () => void;
 	extensionStatuses: readonly string[];
 }
@@ -122,6 +162,13 @@ interface LifecycleToken {
 
 const NOT_ACTIVE = "Pi Atelier is not active in this session";
 const RESIZE_SHORTCUT = "ctrl+shift+r";
+
+/** Pi matches modifiers in any order, so `shift+ctrl+r` and `ctrl+shift+r` are the same key. */
+const keyIdentity = (key: string): string => {
+	const parts = key.toLowerCase().split("+");
+	const last = parts.pop() ?? "";
+	return [...parts.sort(), last].join("+");
+};
 
 const userConfigPath = (): string => join(getAgentDir(), "pi-atelier.json");
 
@@ -149,7 +196,9 @@ export default function atelierExtension(
 	const noopRender = (): void => undefined;
 	let activeSession: ActiveSession | undefined;
 	let enabled = true;
-	let customShortcutRegistered = false;
+	/** Set while a prefill-annotated request is in flight; `on` gives the unsubscribe on Pi 0.99. */
+	let prefillStreamOff: (() => void) | undefined;
+	let customShortcutsRegistered = false;
 	let lifecycleToken: LifecycleToken = { id: 0 };
 	let initializingSessionManager: ExtensionContext["sessionManager"] | undefined;
 
@@ -219,10 +268,11 @@ export default function atelierExtension(
 				availableToolCount: 0,
 			});
 		}
-		const { ctx, panelRegistry, runActivity, runtime } = targetSession;
+		const { ctx, panelRegistry, prefill, runActivity, runtime } = targetSession;
 		const sessionName = ctx.sessionManager.getSessionName();
 		const sessionFile = ctx.sessionManager.getSessionFile();
 		const activeTools = pi.getActiveTools();
+		const prefillProgress = prefill.getSnapshot();
 		return buildSidebarSnapshot({
 			state: { ...runtime.getState(), extensionStatuses: targetSession.extensionStatuses },
 			cwd: ctx.cwd,
@@ -235,6 +285,7 @@ export default function atelierExtension(
 			runActivity: runActivity.getSnapshot(),
 			todos: targetSession.todos,
 			sidebarPanels: panelRegistry.getAvailable(),
+			...(prefillProgress ? { prefill: prefillProgress } : {}),
 		});
 	}
 
@@ -325,6 +376,23 @@ export default function atelierExtension(
 				`Sidebar tool list changed for this session but could not be saved: ${errorMessage(error)}`,
 				"warning",
 			);
+		}
+	}
+
+	/** A confirmed resize becomes the starting width for future sessions. */
+	async function saveSidebarWidth(
+		ctx: ExtensionContext,
+		width: number,
+		targetSession: ActiveSession,
+	): Promise<void> {
+		targetSession.runtime.setConfig({ ...targetSession.runtime.getConfig(), sidebarWidth: width });
+		try {
+			await lifecycleGuardedSavePatch(targetSession)(userConfigPath(), { sidebarWidth: width });
+			if (activeSession !== targetSession) return;
+			ctx.ui.notify(`Sidebar width saved: ${width} columns`, "info");
+		} catch (error) {
+			if (activeSession !== targetSession) return;
+			ctx.ui.notify(`Sidebar width could not be saved: ${errorMessage(error)}`, "warning");
 		}
 	}
 
@@ -647,21 +715,37 @@ export default function atelierExtension(
 		},
 	});
 
-	/** A configured shortcut is read from the first loaded config; Pi cannot unregister shortcuts. */
-	function registerCustomShortcut(ctx: ExtensionContext, shortcut: string): void {
-		if (customShortcutRegistered) return;
-		customShortcutRegistered = true;
-		if (shortcut.toLowerCase() === DEFAULT_CONFIG.shortcut) return;
+	/** Configured shortcuts are read from the first loaded config; Pi cannot unregister shortcuts. */
+	function registerCustomShortcuts(ctx: ExtensionContext, config: AtelierConfig): void {
+		if (customShortcutsRegistered) return;
+		customShortcutsRegistered = true;
+		const { shortcut, toggleShortcut } = config;
+		if (shortcut.toLowerCase() !== DEFAULT_CONFIG.shortcut) {
+			try {
+				pi.registerShortcut(shortcut as KeyId, {
+					description: "Open Pi Atelier",
+					handler: async (shortcutContext) => openMenu(shortcutContext),
+				});
+			} catch {
+				ctx.ui.notify(
+					`Cannot register Atelier shortcut "${shortcut}"; ${DEFAULT_CONFIG.shortcut} remains available`,
+					"warning",
+				);
+			}
+		}
+		if (!toggleShortcut) return;
+		const reservedKeys = [DEFAULT_CONFIG.shortcut, shortcut, RESIZE_SHORTCUT].map(keyIdentity);
+		if (reservedKeys.includes(keyIdentity(toggleShortcut))) {
+			ctx.ui.notify(`toggleShortcut "${toggleShortcut}" is already an Atelier shortcut`, "warning");
+			return;
+		}
 		try {
-			pi.registerShortcut(shortcut as KeyId, {
-				description: "Open Pi Atelier",
-				handler: async (shortcutContext) => openMenu(shortcutContext),
+			pi.registerShortcut(toggleShortcut as KeyId, {
+				description: "Toggle Pi Atelier sidebar",
+				handler: async (shortcutContext) => commands.get("sidebar")?.(shortcutContext, []),
 			});
 		} catch {
-			ctx.ui.notify(
-				`Cannot register Atelier shortcut "${shortcut}"; ${DEFAULT_CONFIG.shortcut} remains available`,
-				"warning",
-			);
+			ctx.ui.notify(`Cannot register Atelier toggleShortcut "${toggleShortcut}"`, "warning");
 		}
 	}
 
@@ -680,6 +764,19 @@ export default function atelierExtension(
 		};
 		const runActivity = createRunActivityTracker({ cwd: ctx.cwd, onChange: requestRenders });
 		cleanup.push(() => runActivity.reset());
+		const prefill = createPrefillTracker({ providers: config.prefillProviders });
+		const prefillThrottle = createPrefillThrottle({
+			requestRender: () => {
+				const current = activeSession;
+				if (current?.token === token) current.sidebar.requestRender();
+			},
+			schedule: (delayMs, run) => {
+				const timer = setTimeout(run, delayMs);
+				return () => clearTimeout(timer);
+			},
+		});
+		cleanup.push(() => prefillThrottle.cancel());
+		cleanup.push(() => stopListeningForPrefillChunks());
 		let autoCompact: boolean | null = null;
 		try {
 			autoCompact = SettingsManager.create(
@@ -725,6 +822,11 @@ export default function atelierExtension(
 			getConfig: () => (isPublished() ? runtime.getConfig() : config),
 			colorEnabled: isColorEnabled(),
 			shouldAnimate: () => enabled && isPublished() && runActivity.isRunning(),
+			initialWidth: config.sidebarWidth,
+			onResizeCommit: (width) => {
+				const current = activeSession;
+				if (current?.token === token) void saveSidebarWidth(ctx, width, current);
+			},
 			onWarning: (message) => ctx.ui.notify(message, "warning"),
 			onError: (error) => ctx.ui.notify(`Pi Atelier sidebar failed: ${errorMessage(error)}`, "error"),
 		});
@@ -738,6 +840,8 @@ export default function atelierExtension(
 			sidebar,
 			panelRegistry,
 			runActivity,
+			prefill,
+			prefillThrottle,
 			completionNotifier,
 			retiredState: createInertAtelierState(autoCompact),
 			retiredConfig: structuredClone(config),
@@ -751,6 +855,7 @@ export default function atelierExtension(
 			askUserBlocked: false,
 			inputRequestSequence: 0,
 			todos: enabled ? reconstructTodos(ctx) : [],
+			providerFailed: false,
 			requestFooterRender: noopRender,
 			extensionStatuses: [],
 		};
@@ -805,7 +910,7 @@ export default function atelierExtension(
 			activeSession = session;
 			published = session;
 			if (previousSession) disposeSession(previousSession, { clearFooter: true });
-			registerCustomShortcut(ctx, loaded.config.shortcut);
+			registerCustomShortcuts(ctx, loaded.config);
 			session.sidebar.setMode("manual");
 			if (enabled) {
 				syncFooter(session);
@@ -839,6 +944,7 @@ export default function atelierExtension(
 		if (!current) return;
 		current.runActivity.startRun();
 		current.completionNotifier.runStarted();
+		current.providerFailed = false;
 		current.runtime.setActivity("working");
 	});
 	pi.on("turn_start", (event, ctx) => {
@@ -848,8 +954,47 @@ export default function atelierExtension(
 		current.completionNotifier.runStarted();
 		current.runtime.scheduleWorkspacePulseRefresh();
 	});
-	pi.on("before_provider_request", (_event, ctx) => {
-		if (enabled) getActiveSession(ctx)?.runActivity.startResponse();
+	/** Pi awaits a per-chunk emit for every registered handler, so the chunk listener exists only
+	 *  while a request that asked for progress is in flight. */
+	function listenForPrefillChunks(): void {
+		if (prefillStreamOff) return;
+		prefillStreamOff = registerProviderStreamHandler(pi, (event, ctx) => {
+			const current = getActiveSession(ctx);
+			if (!enabled || !current || event.api !== OPENAI_COMPLETIONS_API) return;
+			const wasShowing = current.prefill.getSnapshot() !== undefined;
+			if (current.prefill.noteChunk(event.data)) {
+				current.prefillThrottle.note();
+				return;
+			}
+			// Generation started: the transient panel is gone, so redraw once to drop it.
+			if (wasShowing) {
+				current.prefillThrottle.cancel();
+				current.sidebar.requestRender();
+			}
+		});
+	}
+
+	function stopListeningForPrefillChunks(): void {
+		prefillStreamOff?.();
+		prefillStreamOff = undefined;
+	}
+
+	pi.on("before_provider_request", (event, ctx) => {
+		const current = getActiveSession(ctx);
+		if (!enabled || !current) return;
+		current.runActivity.startResponse();
+		const config = current.runtime.getConfig();
+		if (!config.prefillEnabled || config.prefillProviders.length === 0) {
+			stopListeningForPrefillChunks();
+			return;
+		}
+		if (!current.prefill.noteRequest(ctx.model, event.payload)) {
+			stopListeningForPrefillChunks();
+			return;
+		}
+		// The provider is allow-listed and streams: ask it to report prefill progress.
+		listenForPrefillChunks();
+		return { ...(event.payload as Record<string, unknown>), return_progress: true };
 	});
 	pi.on("message_update", (event, ctx) => {
 		const current = getActiveSession(ctx);
@@ -879,32 +1024,29 @@ export default function atelierExtension(
 		if (!current || event.isError) return;
 		const todos = todosFromDetails(event.details);
 		if (!todos) return;
-		// Keep state updates independent from whether the TODO panel is currently presented.
+		// Leave the result content untouched: it is what the model reads, including task ids.
 		current.todos = todos;
-		const sidebarVisible = current.sidebar.isVisible();
 		current.sidebar.requestRender();
-		const todoPanelVisible = current.runtime
-			.getConfig()
-			.sidebarPanelLayout.some((entry) => entry.id === "todos" && entry.visible);
-		// The sidebar shows the list, so collapse the tool output to a summary.
-		if (!todoPanelVisible || !sidebarVisible || todos.length === 0) return;
-		const done = todos.filter((todo) => todo.status === "completed").length;
-		return { content: [{ type: "text", text: `${done}/${todos.length} done · see sidebar` }] };
 	});
 	pi.on("agent_settled", (_event, ctx) => {
 		const current = getActiveSession(ctx);
 		if (!current || !ctx.isIdle()) return;
 		current.runActivity.settle();
-		current.runtime.setActivity("ready");
+		current.prefill.clear();
+		current.prefillThrottle.cancel();
+		current.runtime.setActivity(current.providerFailed ? "error" : "ready");
 		if (!enabled) return;
 		current.sidebar.requestRender();
 		if (current.runtime.getConfig().completionNotifications) {
 			current.completionNotifier.turnSettled(completionNotification(current));
 		}
 	});
-	pi.on("turn_end", async (_event, ctx) => {
+	pi.on("turn_end", async (event, ctx) => {
 		const current = getActiveSession(ctx);
 		if (!current) return;
+		// Pi can record a user abort as `stopReason: "error"`, so the run signal decides.
+		current.providerFailed =
+			event.message?.role === "assistant" && event.message.stopReason === "error" && !ctx.signal?.aborted;
 		current.runtime.refreshUsage();
 		await current.runtime.flushWorkspacePulseRefresh();
 	});

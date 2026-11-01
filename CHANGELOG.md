@@ -1,9 +1,23 @@
 # Changelog
 
-## 0.19.0 — 2026-10-24
+## 0.18.0 — 2026-10-31
+
+- Show a temporary Sidebar **Prefill** panel while a local model is still reading a long prompt: a bar over the uncached prompt tokens, the token counts, the reading speed, and an estimate of how long until the first token. A long prefill used to look exactly like a hang. The panel is present only while prefilling and reserves nothing when it is absent. Configure with `prefillEnabled`, `prefillViews`, and the user-only `prefillProviders` allow-list, or toggle it in Control Center → Settings. Needs Pi 0.99 or newer to report progress; on an older Pi the panel never appears.
+- Prefill numbers count uncached tokens, because a cached prefix is not work the user is waiting for. The percent rides the bar, and the speed rides the `First token` row (`~4s · 3.4k tok/s`), taking its own row while no estimate is available. The speed is measured between progress chunks, and the first sample seeds its base with the cached prefix, so a warm prompt does not show a false speed.
+- Prefill asks only `openai-completions` providers on the allow-list, and only when the request body names the allow-listed model, so a Pi virtual model or a redirected request is left alone. A chunk listener exists only while such a request is in flight. A provider that cannot report progress simply never draws the panel, and no request error turns the feature off for the rest of the session: llama.cpp answers 400 when a prompt exceeds its context size, which says nothing about the progress field.
+- A Sidebar layout saved before Prefill existed gains the Prefill panel next to Context instead of at the bottom. A built-in panel that a saved layout predates joins the built-in beside it, and contributed panels keep the position you gave them.
+- Keep a red `× ERROR` activity state when a run ends in a provider error instead of resetting to ready. Tool failures and user aborts still settle to ready.
+- Stop replacing `todo` results with `N/M done · see sidebar` while the TODO panel is visible. The agent now receives the full result, including task ids, `list` output, and refused updates ([#103](https://github.com/michaelmjhhhh/pi-atelier/issues/103)).
+- Stop overstating response TPS. The tokens in the first streamed chunk no longer count toward the rate, and a generation window shorter than 500ms shows no TPS, because chunks that arrive in one batch say nothing about decode speed ([#106](https://github.com/michaelmjhhhh/pi-atelier/issues/106)).
+- Internal: update development dependencies to resolve audit findings (vitest 4.1.12; overrides for undici, glob, minimatch, and zod under Pi 0.84.0). Pi 0.84.0 remains the minimum supported and tested version.
+
+## 0.17.0 — 2026-10-29
 
 - Restore upstream's telemetry-only footer while the editor status header is visible, removing duplicate session information. Keep extension statuses on dedicated rows in both footer modes, without repeating them in the header; retain the complete-footer fallback when the header cannot display.
 - Add a global **Atelier footer** setting. Turn it off in **Settings** or set `"showFooter": false` to keep Pi's or another extension's footer and composer while still using the Sidebar ([#96](https://github.com/michaelmjhhhh/pi-atelier/issues/96)).
+- Add an optional `toggleShortcut` setting that shows or hides the Sidebar with one key, without opening the Control Center. It is unset by default ([#98](https://github.com/michaelmjhhhh/pi-atelier/issues/98)).
+- Remember the Sidebar width across sessions. A confirmed `Ctrl+Shift+R` resize is saved as the user-only `sidebarWidth` setting (28–72 columns, default 44) and becomes the starting width for new sessions ([#100](https://github.com/michaelmjhhhh/pi-atelier/issues/100)).
+- Fix concurrent settings saves that could drop a value or fail with `ENOENT`. Saves to the user configuration now run one at a time.
 
 ## 0.18.1 — 2026-10-23
 

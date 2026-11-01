@@ -57,6 +57,7 @@ Plain text mode works with any monospace font and keeps colors, metrics, and the
 | **Workspace context** | Workspace identity and read-only Git status next to your session. |
 | **Subagent costs** | Colored per-child cost curves from pi-subagents accounting events, with matching legends and real observation markers. `/atelier usage` opens a larger framed graph with keyboard focus and per-reply costs. Kitty-compatible terminals get native graphics; others get text strokes. |
 | **Copy-friendly editor** | Full available width with one-column horizontal padding, no vertical side rails, and the session status header retained above the draft. |
+| **Prefill progress** | While a local model is still reading a long prompt, a temporary sidebar panel shows how far through the prompt it is, how fast it is reading, and how long until the first token. |
 | **Personalization** | Display presets, configurable segments and panels, optional Nerd Font icons, and model and tool controls. |
 | **Extensible sidebar** | Other extensions can add their own panels. See [Sidebar panels from other extensions](#sidebar-panels-from-other-extensions). |
 
@@ -85,8 +86,45 @@ Open `/atelier` or press **F6** to change display settings, control the sidebar,
 
 - Showing or hiding is independent of the mode. A manually hidden sidebar stays hidden when the terminal grows.
 - The preferred width survives terminal resizes and mode changes.
-- Mode, width, and visibility are session-scoped. The startup visibility preference is set in Settings.
-- The TODO panel supports Pi `todo` results and the optional `@juicesharp/rpiv-todo` extension. Hidden TODO results keep their full output.
+- A confirmed resize is saved as `sidebarWidth` and becomes the starting width for new sessions. Escape keeps the saved width.
+- Mode and visibility are session-scoped. The startup visibility preference is set in Settings.
+- The TODO panel supports Pi `todo` results and the optional `@juicesharp/rpiv-todo` extension. Atelier does not change `todo` results, so the agent keeps task ids and `list` output.
+
+### Prefill progress
+
+A long prompt against a local model looks exactly like a hang. When a request streams to an
+allow-listed provider, Pi Atelier asks it for prefill progress and shows a temporary **Prefill**
+panel between Context and Workspace: a bar over the uncached prompt tokens, the token counts, the
+reading speed, and an estimate of how long until the first token.
+
+- Present only while prefilling: it appears above 1024 uncached tokens or 300ms of reading, and is
+  dropped when generation starts, so it reserves nothing when it is absent. Hide the sidebar and
+  there is no prefill UI.
+- Only `openai-completions` endpoints are asked. Servers ignore request fields they do not know,
+  so a provider that cannot report progress never draws the panel, and no request error turns it
+  off for the rest of the session.
+- The field is added only when the request body names the allow-listed model, so a Pi virtual
+  model or a redirected request is left alone.
+- An allow-list entry is a provider id: `llama.cpp` for Pi's built-in llama extension, or the
+  llama-swap instance id for pi-llama-swap. A proxy forwards the field to whatever server runs
+  behind it, so progress appears only when that upstream reports it.
+- Percent counts **uncached** tokens, so a prompt already in the cache shows little or nothing.
+- Speed is measured between progress chunks, and the first sample counts only uncached tokens, so a
+  warm prompt does not report a false speed.
+
+```json
+{
+  "prefillEnabled": true,
+  "prefillViews": ["percent", "tokens", "eta", "rate"],
+  "prefillProviders": ["llama.cpp"]
+}
+```
+
+`prefillViews` accepts `percent`, `tokens`, `eta`, and `rate`. `prefillProviders` is user-only and
+read at session start; `[]` asks no provider. Each entry must equal the provider id of the model you
+run, so the default `llama.cpp` covers only Pi's built-in llama extension: a pi-llama-swap model uses
+its instance id, such as `llama-swap-tre`. Matching ignores case and surrounding spaces. Progress
+reporting needs Pi 0.99 or newer.
 
 ### Status rail presets
 
@@ -98,8 +136,6 @@ Open `/atelier` or press **F6** to change display settings, control the sidebar,
 
 Pi supports one custom footer and one custom editor at a time. Extension load order decides which one is visible. To keep another extension's footer and use only the Atelier sidebar, choose **Settings → Atelier footer → Off** or set `"showFooter": false`. This also leaves Pi's composer unchanged. The sidebar does not show extension statuses while the Atelier footer is off.
 
-Atelier includes the copy-friendly editor behavior; disable the standalone `copy-friendly-editor.ts` when using this version, since it repeatedly replaces other custom editors.
-
 ## Configuration
 
 | Scope | Path |
@@ -107,26 +143,33 @@ Atelier includes the copy-friendly editor behavior; disable the standalone `copy
 | User | `~/.pi/agent/pi-atelier.json` |
 | Project (trusted only) | `<project>/.pi/pi-atelier.json` |
 
-Project settings override user settings, and session changes override both. Font mode, footer, sidebar startup, and notification preferences are user-only.
+Project settings override user settings, and session changes override both. Font mode, footer, sidebar startup, sidebar width, notification preferences, and the prefill provider allow-list are user-only.
 
 ```json
 {
   "preset": "editorial",
   "nerdFont": true,
   "shortcut": "f6",
+  "toggleShortcut": "",
   "density": "comfortable",
   "contextWarning": 70,
   "contextDanger": 90,
   "showFooter": true,
   "showSidebarOnStartup": true,
+  "sidebarWidth": 44,
   "showSidebarToolNames": false,
-  "completionNotifications": true
+  "completionNotifications": true,
+  "prefillEnabled": true,
+  "prefillViews": ["percent", "tokens", "eta", "rate"],
+  "prefillProviders": ["llama.cpp"]
 }
 ```
 
-Use **Settings → Display** to reorder or hide status rail segments and sidebar panels. Undo restores the latest Display or Sidebar edit, including a Display Revert. The legacy user settings `showSidebarAgent` and `showSidebarTodos` still apply when `sidebarPanelLayout` is absent.
+`toggleShortcut` binds a key that shows or hides the Sidebar directly, like `/atelier sidebar`. It is empty (no binding) by default; set a key such as `"ctrl+shift+b"` and run `/reload`.
 
-To reorder individual custom-extension statuses, set `extensionStatusOrder` in the JSON file. See [Extension status ordering](#extension-status-ordering).
+`sidebarWidth` is the sidebar width in columns when a session starts, from 28 through 72. The sidebar still narrows when the terminal leaves less than 64 columns for the main pane.
+
+Use **Settings → Display** to reorder or hide status rail segments and sidebar panels. Undo restores the latest Display or Sidebar edit, including a Display Revert. The legacy user settings `showSidebarAgent` and `showSidebarTodos` still apply when `sidebarPanelLayout` is absent. A layout you saved before Prefill existed gains that panel next to Context on the next start.
 
 ### Sidebar panels from other extensions
 
@@ -186,6 +229,7 @@ ignore `progress`. No-color mode uses plain filled/empty blocks.
 | Problem | Fix |
 | --- | --- |
 | Shortcut does nothing | Use `/atelier`, change `shortcut`, then run `/reload`. The default is `f6` on macOS and Windows; media-key keyboards may need Fn+F6. Saved `alt+a` settings resolve to `f6` and Alt+A is no longer registered. Other custom shortcuts add a binding alongside F6. Other extensions or terminal key mappings can still intercept F6. |
+| Editor key stops working | Extension shortcuts take precedence over Pi's built-in keybindings. A `shortcut` or `toggleShortcut` such as `ctrl+b` shadows the editor's cursor-left action. Choose a key Pi does not use, then run `/reload`. |
 | Status rail missing | Use TUI mode, check **Settings → Atelier footer**, and check for another extension's custom footer. |
 | Icons render as boxes | Choose **Settings → Font mode → Plain text**, or select a Nerd Font in your terminal. |
 | Metrics disagree | Token and cost totals cover the session; context usage covers the current model context. |
@@ -221,63 +265,6 @@ Development stays on Pi 0.84.0 to check the minimum supported API. A scoped npm 
 
 </details>
 
-## Fork feature: copy-friendly editor
-
-Atelier owns the composer as well as its status header. The editor uses the full width available beside the sidebar, with one column of padding on each side and no vertical rails or corner caps. Pi's native horizontal rules, thinking-level and bash-mode colors, scroll hints, cursor handling, and autocomplete remain in place. As upstream, the footer shows only telemetry while the editor's status header is visible, avoiding duplicate session information. Dedicated extension-status rows remain below it. When the header cannot display, the complete footer returns.
-
-The one-column padding is fixed even if Pi reapplies its `editorPaddingX` setting. No ownership-reclaim timers or extra extension are needed. Disable the standalone `copy-friendly-editor.ts` before switching to this version; keep a renamed backup if you want to roll back.
-
-### Manual editor verification TODO
-
-From the repository root, open an in-memory session with only this checkout's extension:
-
-```bash
-pi-bolt --no-session --no-extensions -e ./extensions/index.ts
-```
-
-- [ ] Type and select a multiline draft in the terminal; confirm copied text has no side-rail characters. In fullscreen mode, use your terminal's selection override (often Shift-drag).
-- [ ] Resize the terminal and toggle `/atelier sidebar`; confirm the draft fills the available area with one-column padding, wrapping and cursor movement remain aligned, and no text is clipped.
-- [ ] Open slash-command and file autocomplete; confirm suggestions remain below the bottom rule and keyboard selection still works.
-- [ ] Use a long draft, change thinking level, and enter bash mode; confirm scroll hints, border colors, and the status header survive. Confirm session information appears only in the header while telemetry and dedicated extension statuses remain below the editor. At very narrow widths, on terminals shorter than 12 rows, and when a selector replaces the editor, confirm the complete footer returns. Repeat after `/reload`.
-- [ ] Run `/reload`, `/atelier disable`, and `/atelier enable`; confirm the native editor returns when disabled and the copy-friendly editor returns when enabled. Repeat with `--tui-mode regular`.
-
-## Fork features: extension statuses
-
-### Dedicated status rows
-
-This fork renders extension statuses on dedicated rows beneath the status rail instead of inline in it. Statuses wrap as whole items, joined by the rail's dim separator, oversized statuses truncate with an ellipsis, and the rail row keeps upstream behavior.
-
-### Extension status ordering
-
-In addition to dedicated rows, this fork supports JSON-configurable ordering of individual custom-extension statuses:
-
-```json
-{
-  "extensionStatusOrder": ["my-extension", "another-extension"]
-}
-```
-
-Add this field to `~/.pi/agent/pi-atelier.json`, or to `<project>/.pi/pi-atelier.json` for a trusted project override. The project list replaces the user list rather than merging with it. Run `/reload` after editing the file.
-
-- Entries are exact, case-sensitive status keys: `ctx.ui.setStatus("my-extension", text)` uses the key `my-extension`. These are not necessarily extension filenames, package names, or displayed labels. An extension may publish several keys; find them in its `setStatus()` calls.
-- Listed statuses appear first in the configured order. Unlisted statuses follow in the order provided by Pi; none are hidden by this setting.
-- Missing keys are ignored until their statuses appear. Duplicate keys are used once. An absent setting or `[]` preserves Pi's ordering.
-- The list must contain non-empty strings. Invalid input produces a configuration warning and keeps the inherited list. Status sanitization, wrapping, truncation, and visibility settings remain unchanged.
-
-#### Manual verification TODO
-
-Open a temporary session with only this checkout's Atelier extension:
-
-```bash
-./node_modules/.bin/pi --no-session --no-extensions -e ./extensions/index.ts
-```
-
-Custom status producers are intentionally not loaded by that command. For ordering checks, explicitly load trusted producer extensions with additional `-e <path>` arguments; do not load an installed copy of Atelier.
-
-- [ ] Configure two known status keys in reverse order, run `/reload`, and confirm listed statuses come first while unlisted statuses remain visible.
-- [ ] Update and remove a producer's status; confirm its position stays configured and removed statuses disappear. An unavailable configured key must not create a blank item.
-- [ ] Try `[]`, duplicate keys, and an invalid list such as `[42]`; confirm default ordering, no duplicate output, and a warning respectively.
-- [ ] Check a trusted project override and an untrusted project; confirm only the trusted project's list overrides the user list.
-- [ ] Resize the terminal; confirm existing dedicated-row wrapping and truncation remain intact when status rows are visible.
+## License
 
 [MIT](https://github.com/michaelmjhhhh/pi-atelier/blob/main/LICENSE)

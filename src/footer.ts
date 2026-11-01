@@ -152,7 +152,8 @@ function activityText(
 	const label = state.activity === "working" && !compact ? (state.workingLabel ?? fallback) : fallback;
 	const dots =
 		state.activity === "working" && !compact ? workingDots.padEnd(WORKING_DOT_FRAMES[0].length, " ") : "";
-	return palette.paint(state.activity, theme.bold(`${nerdFont ? "● " : ""}${sanitizeInline(label)}${dots}`));
+	const marker = state.activity === "error" ? "× " : nerdFont ? "● " : "";
+	return palette.paint(state.activity, theme.bold(`${marker}${sanitizeInline(label)}${dots}`));
 }
 
 interface ItemContext {
