@@ -34,6 +34,17 @@ describe("configuration validation", () => {
 		expect(invalid.warnings).toContain("toggleShortcut must be a string");
 	});
 
+	it("validates the sidebar resize shortcut", () => {
+		expect(DEFAULT_CONFIG.resizeShortcut).toBe("ctrl+shift+r");
+		expect(validateConfig({ resizeShortcut: " alt+r " }).config.resizeShortcut).toBe("alt+r");
+		const blank = validateConfig({ resizeShortcut: "  " });
+		expect(blank.config.resizeShortcut).toBe("ctrl+shift+r");
+		expect(blank.warnings).toContain("resizeShortcut cannot be empty");
+		const invalid = validateConfig({ resizeShortcut: 1 });
+		expect(invalid.config.resizeShortcut).toBe("ctrl+shift+r");
+		expect(invalid.warnings).toContain("resizeShortcut must be a string");
+	});
+
 	it("parses the user-only sidebar width", () => {
 		expect(DEFAULT_CONFIG.sidebarWidth).toBe(44);
 		expect(validateConfig({ sidebarWidth: 36 }).config.sidebarWidth).toBe(36);
@@ -46,6 +57,18 @@ describe("configuration validation", () => {
 		expect(
 			resolveConfig({ user: { sidebarWidth: 36 }, project: { sidebarWidth: 60 } }).config.sidebarWidth,
 		).toBe(36);
+	});
+
+	it("parses the user-only sidebar style", () => {
+		expect(DEFAULT_CONFIG.sidebarStyle).toBe("framed");
+		expect(validateConfig({ sidebarStyle: "minimal" }).config.sidebarStyle).toBe("minimal");
+		const invalid = validateConfig({ sidebarStyle: "boxed" });
+		expect(invalid.config.sidebarStyle).toBe("framed");
+		expect(invalid.warnings).toContain("Unknown sidebarStyle: boxed");
+		expect(
+			resolveConfig({ user: { sidebarStyle: "minimal" }, project: { sidebarStyle: "framed" } }).config
+				.sidebarStyle,
+		).toBe("minimal");
 	});
 
 	it("keeps legacy Sidebar visibility compatible when no authoritative layout is present", () => {
@@ -168,7 +191,8 @@ describe("configuration validation", () => {
 
 	it("rejects non-boolean showSidebarAgent with warning", () => {
 		const result = validateConfig({ showSidebarAgent: "off" });
-		expect(result.config.sidebarPanelLayout.find((entry) => entry.id === "agent")?.visible).toBe(true);
+		// The invalid value leaves Agent at its default: hidden.
+		expect(result.config.sidebarPanelLayout.find((entry) => entry.id === "agent")?.visible).toBe(false);
 		expect(result.warnings).toContain("showSidebarAgent must be boolean");
 	});
 });
@@ -256,14 +280,15 @@ describe("configuration files", () => {
 	});
 
 	it("ignores project and session legacy Sidebar visibility when the user omits it", async () => {
-		await writeJson(projectPath, { showSidebarAgent: false, showSidebarTodos: false });
+		// Each value is the opposite of its panel's default, so an applied value would show.
+		await writeJson(projectPath, { showSidebarAgent: true, showSidebarTodos: false });
 		const result = await loadConfig({
 			userPath,
 			projectPath,
 			projectTrusted: true,
-			session: { showSidebarAgent: false, showSidebarTodos: false },
+			session: { showSidebarAgent: true, showSidebarTodos: false },
 		});
-		expect(result.config.sidebarPanelLayout.find((entry) => entry.id === "agent")?.visible).toBe(true);
+		expect(result.config.sidebarPanelLayout.find((entry) => entry.id === "agent")?.visible).toBe(false);
 		expect(result.config.sidebarPanelLayout.find((entry) => entry.id === "todos")?.visible).toBe(true);
 	});
 
@@ -305,6 +330,10 @@ describe("configuration files", () => {
 			completionNotifications: false,
 			nerdFont: false,
 		});
+	});
+
+	it("defaults to Plain text glyphs so a terminal without a Nerd Font stays readable", () => {
+		expect(resolveConfig({}).config.nerdFont).toBe(false);
 	});
 
 	it("defaults prefill to a llama.cpp-only panel with four distinct views", () => {

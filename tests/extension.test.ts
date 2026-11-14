@@ -39,7 +39,7 @@ describe("extension registration", () => {
 				});
 				await command(h, "sidebar on");
 				const rendered = h.overlays.at(-1)?.component.render(44).join("\\n") ?? "";
-				expect(rendered).toContain("QUEUE");
+				expect(rendered).toContain("Queue");
 				expect(rendered).toContain("queued 2");
 			},
 		);
@@ -68,16 +68,16 @@ describe("extension registration", () => {
 		{ columns: 20, rows: 24 },
 		{ columns: 22, rows: 24 },
 	])("keeps complete context in the footer at $columns×$rows", async ({ columns, rows }) => {
-		const h = harness();
+		const h = harness("tui", "linux", false);
 		await start(h);
 		const { tui, editor, footer } = mountComposer(h);
 		try {
-			expect(editor.render(80)[0]).toContain("● READY");
+			expect(editor.render(80)[0]).toContain("READY");
 			footer.render(80);
 			Object.assign(tui.terminal, { columns, rows });
-			expect(editor.render(columns)[0]).not.toContain("● READY");
+			expect(editor.render(columns)[0]).not.toContain("READY");
 			const fallback = footer.render(columns).join("\n");
-			expect(fallback).toContain("● READY");
+			expect(fallback).toContain("READY");
 			expect(fallback).toContain("10.0%");
 
 			Object.assign(tui.terminal, { columns: 80, rows: 24 });
@@ -125,9 +125,21 @@ describe("extension registration", () => {
 				`toggleShortcut "${key}" is already an Atelier shortcut`,
 				"warning",
 			);
-			expect(h.shortcuts).toEqual(["f6", "ctrl+shift+r", "alt+x"]);
+			expect(h.shortcuts).toEqual(["f6", "alt+x", "ctrl+shift+r"]);
 		},
 	);
+
+	it("binds a configured resizeShortcut instead of ctrl+shift+r", async () => {
+		const h = harness();
+		await withPersistedUserConfig({ resizeShortcut: "alt+r" }, async () => {
+			await start(h);
+		});
+		expect(h.shortcuts).toEqual(["f6", "alt+r"]);
+		await command(h, "sidebar manual");
+		await command(h, "sidebar on");
+		await h.shortcutHandlers.get("alt+r")?.(h.ctx);
+		expect(h.terminalWrite).toHaveBeenCalledWith("\u001b[?1002h\u001b[?1006h");
+	});
 
 	it("does not install terminal UI outside TUI mode", async () => {
 		const h = harness("print");

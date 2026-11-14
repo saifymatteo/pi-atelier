@@ -2,7 +2,7 @@
 
 A fork of [michaelmjhhhh/pi-atelier](https://github.com/michaelmjhhhh/pi-atelier) — a responsive status rail and live activity sidebar for [Pi](https://pi.dev).
 
-**The original work and its full documentation live upstream.** Read the [upstream README](https://github.com/michaelmjhhhh/pi-atelier#readme) for what Pi Atelier is, how to install and use it, and its complete feature, configuration, and troubleshooting reference. This README covers only what this fork adds or changes on top of upstream v0.18.0. [`CHANGELOG.md`](CHANGELOG.md) records every fork release.
+**The original work and its full documentation live upstream.** Read the [upstream README](https://github.com/michaelmjhhhh/pi-atelier#readme) for what Pi Atelier is, how to install and use it, and its complete feature, configuration, and troubleshooting reference. This README covers only what this fork adds or changes on top of upstream v0.20.0 plus the framed panel title-casing fix (`a799be1`). [`CHANGELOG.md`](CHANGELOG.md) records every fork release.
 
 ## Install
 

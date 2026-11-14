@@ -15,6 +15,7 @@ import {
 	type SpawnNotificationProcess,
 } from "../src/completion-notifier.js";
 import { DEFAULT_CONFIG, loadConfig, saveUserConfigPatch } from "../src/config.js";
+import { planShortcuts } from "../src/shortcuts.js";
 import { AtelierEditor } from "../src/editor.js";
 import { type AtelierFooterComponent, createFooterComponent } from "../src/footer.js";
 import { createImageCompositorBinding } from "../src/image-compositor.js";
@@ -27,7 +28,11 @@ import {
 	type PrefillThrottle,
 	type PrefillTracker,
 } from "../src/prefill.js";
-import { createRunActivityTracker, type RunActivityTracker } from "../src/run-activity.js";
+import {
+	createRunActivityTracker,
+	isCompletionGlowing,
+	type RunActivityTracker,
+} from "../src/run-activity.js";
 import type { SidebarPanelSetting } from "../src/settings-workspace.js";
 import {
 	buildSidebarSnapshot,
@@ -139,7 +144,6 @@ interface ActiveSession {
 	readonly completionNotifier: CompletionNotifier;
 	readonly retiredState: AtelierState;
 	readonly retiredConfig: AtelierConfig;
-	readonly retiredCwd: string;
 	readonly overlayCancellations: Set<() => void>;
 	readonly overlayLifetime: OverlayLifetime;
 	footerDisposer: (() => void) | undefined;
@@ -161,14 +165,6 @@ interface LifecycleToken {
 }
 
 const NOT_ACTIVE = "Pi Atelier is not active in this session";
-const RESIZE_SHORTCUT = "ctrl+shift+r";
-
-/** Pi matches modifiers in any order, so `shift+ctrl+r` and `ctrl+shift+r` are the same key. */
-const keyIdentity = (key: string): string => {
-	const parts = key.toLowerCase().split("+");
-	const last = parts.pop() ?? "";
-	return [...parts.sort(), last].join("+");
-};
 
 const userConfigPath = (): string => join(getAgentDir(), "pi-atelier.json");
 
@@ -198,7 +194,7 @@ export default function atelierExtension(
 	let enabled = true;
 	/** Set while a prefill-annotated request is in flight; `on` gives the unsubscribe on Pi 0.99. */
 	let prefillStreamOff: (() => void) | undefined;
-	let customShortcutsRegistered = false;
+	let configuredShortcutsRegistered = false;
 	let lifecycleToken: LifecycleToken = { id: 0 };
 	let initializingSessionManager: ExtensionContext["sessionManager"] | undefined;
 
@@ -262,23 +258,17 @@ export default function atelierExtension(
 		if (!enabled || activeSession !== targetSession) {
 			return buildSidebarSnapshot({
 				state: targetSession.retiredState,
-				cwd: targetSession.retiredCwd,
-				branchEntryCount: 0,
 				activeToolCount: 0,
 				availableToolCount: 0,
 			});
 		}
 		const { ctx, panelRegistry, prefill, runActivity, runtime } = targetSession;
 		const sessionName = ctx.sessionManager.getSessionName();
-		const sessionFile = ctx.sessionManager.getSessionFile();
 		const activeTools = pi.getActiveTools();
 		const prefillProgress = prefill.getSnapshot();
 		return buildSidebarSnapshot({
 			state: { ...runtime.getState(), extensionStatuses: targetSession.extensionStatuses },
-			cwd: ctx.cwd,
 			...(sessionName ? { sessionName } : {}),
-			...(sessionFile ? { sessionFile } : {}),
-			branchEntryCount: ctx.sessionManager.getBranch().length,
 			activeToolCount: activeTools.length,
 			availableToolCount: pi.getAllTools().length,
 			activeToolNames: activeTools,
@@ -703,50 +693,41 @@ export default function atelierExtension(
 		description: "Open Pi Atelier",
 		handler: async (shortcutContext) => openMenu(shortcutContext),
 	});
-	pi.registerShortcut(RESIZE_SHORTCUT, {
-		description: "Resize Pi Atelier sidebar",
-		handler: (shortcutContext) => {
-			const current = getActiveSession(shortcutContext);
-			if (!current?.sidebar.getStatus().enabled) {
-				shortcutContext.ui.notify("Show the Pi Atelier sidebar before resizing it", "warning");
-				return;
-			}
-			current.sidebar.beginResize();
-		},
-	});
-
-	/** Configured shortcuts are read from the first loaded config; Pi cannot unregister shortcuts. */
-	function registerCustomShortcuts(ctx: ExtensionContext, config: AtelierConfig): void {
-		if (customShortcutsRegistered) return;
-		customShortcutsRegistered = true;
-		const { shortcut, toggleShortcut } = config;
-		if (shortcut.toLowerCase() !== DEFAULT_CONFIG.shortcut) {
-			try {
-				pi.registerShortcut(shortcut as KeyId, {
-					description: "Open Pi Atelier",
-					handler: async (shortcutContext) => openMenu(shortcutContext),
-				});
-			} catch {
-				ctx.ui.notify(
-					`Cannot register Atelier shortcut "${shortcut}"; ${DEFAULT_CONFIG.shortcut} remains available`,
-					"warning",
-				);
-			}
-		}
-		if (!toggleShortcut) return;
-		const reservedKeys = [DEFAULT_CONFIG.shortcut, shortcut, RESIZE_SHORTCUT].map(keyIdentity);
-		if (reservedKeys.includes(keyIdentity(toggleShortcut))) {
-			ctx.ui.notify(`toggleShortcut "${toggleShortcut}" is already an Atelier shortcut`, "warning");
+	const resizeSidebar = (shortcutContext: ExtensionContext): void => {
+		const current = getActiveSession(shortcutContext);
+		if (!current?.sidebar.getStatus().enabled) {
+			shortcutContext.ui.notify("Show the Pi Atelier sidebar before resizing it", "warning");
 			return;
 		}
-		try {
-			pi.registerShortcut(toggleShortcut as KeyId, {
+		current.sidebar.beginResize();
+	};
+	/**
+	 * Configured shortcuts are read from the first loaded config; Pi cannot unregister shortcuts.
+	 * The resize key is bound only here so a custom `resizeShortcut` leaves `ctrl+shift+r` free.
+	 */
+	function registerConfiguredShortcuts(ctx: ExtensionContext, config: AtelierConfig): void {
+		if (configuredShortcutsRegistered) return;
+		configuredShortcutsRegistered = true;
+		const plan = planShortcuts(config);
+		if (plan.open) {
+			pi.registerShortcut(plan.open as KeyId, {
+				description: "Open Pi Atelier",
+				handler: async (shortcutContext) => openMenu(shortcutContext),
+			});
+		}
+		if (plan.resize) {
+			pi.registerShortcut(plan.resize as KeyId, {
+				description: "Resize Pi Atelier sidebar",
+				handler: resizeSidebar,
+			});
+		}
+		if (plan.toggle) {
+			pi.registerShortcut(plan.toggle as KeyId, {
 				description: "Toggle Pi Atelier sidebar",
 				handler: async (shortcutContext) => commands.get("sidebar")?.(shortcutContext, []),
 			});
-		} catch {
-			ctx.ui.notify(`Cannot register Atelier toggleShortcut "${toggleShortcut}"`, "warning");
 		}
+		for (const warning of plan.warnings) ctx.ui.notify(warning, "warning");
 	}
 
 	/** Builds a session from loaded config; nothing here awaits, so the caller's token stays fresh. */
@@ -821,7 +802,10 @@ export default function atelierExtension(
 			},
 			getConfig: () => (isPublished() ? runtime.getConfig() : config),
 			colorEnabled: isColorEnabled(),
-			shouldAnimate: () => enabled && isPublished() && runActivity.isRunning(),
+			shouldAnimate: () =>
+				enabled &&
+				isPublished() &&
+				(runActivity.isRunning() || isCompletionGlowing(runActivity.getSnapshot(), Date.now())),
 			initialWidth: config.sidebarWidth,
 			onResizeCommit: (width) => {
 				const current = activeSession;
@@ -845,7 +829,6 @@ export default function atelierExtension(
 			completionNotifier,
 			retiredState: createInertAtelierState(autoCompact),
 			retiredConfig: structuredClone(config),
-			retiredCwd: ctx.cwd,
 			overlayCancellations,
 			overlayLifetime: createOverlayLifetime(token, overlayCancellations),
 			footerDisposer: undefined,
@@ -900,6 +883,8 @@ export default function atelierExtension(
 			});
 			// The only await: a newer lifecycle may have started meanwhile.
 			if (!isFresh()) return;
+			// Before session creation, so a failed session still leaves the keys bound.
+			registerConfiguredShortcuts(ctx, loaded.config);
 			for (const warning of loaded.warnings) ctx.ui.notify(warning, "warning");
 			const session = createSession(ctx, token, loaded.config, loaded, candidateCleanup);
 			candidateCleanup.length = 0;
@@ -910,7 +895,6 @@ export default function atelierExtension(
 			activeSession = session;
 			published = session;
 			if (previousSession) disposeSession(previousSession, { clearFooter: true });
-			registerCustomShortcuts(ctx, loaded.config);
 			session.sidebar.setMode("manual");
 			if (enabled) {
 				syncFooter(session);

@@ -22,22 +22,22 @@ import {
 
 describe("extension session", () => {
 	it("moves session identity back to the footer while a selector replaces the editor", async () => {
-		const h = harness();
+		const h = harness("tui", "linux", false);
 		await start(h);
 		const { editor, footer } = mountComposer(h);
 		try {
 			const header = editor.render(80)[0];
-			for (const text of ["● READY", "project", "main", "10.0%"]) expect(header).toContain(text);
+			for (const text of ["READY", "project", "main", "10.0%"]) expect(header).toContain(text);
 			const telemetry = footer.render(80).join("\n");
 			expect(telemetry).toContain("F6");
-			for (const text of ["● READY", "project", "main", "10.0%"]) expect(telemetry).not.toContain(text);
+			for (const text of ["READY", "project", "main", "10.0%"]) expect(telemetry).not.toContain(text);
 
 			// Pi selectors replace the editor without disposing it or rendering it again.
 			const selectorFooter = footer.render(80).join("\n");
-			for (const text of ["● READY", "project", "main", "10.0%"]) expect(selectorFooter).toContain(text);
+			for (const text of ["READY", "project", "main", "10.0%"]) expect(selectorFooter).toContain(text);
 
-			expect(editor.render(80)[0]).toContain("● READY");
-			expect(footer.render(80).join("\n")).not.toContain("● READY");
+			expect(editor.render(80)[0]).toContain("READY");
+			expect(footer.render(80).join("\n")).not.toContain("READY");
 		} finally {
 			footer.dispose();
 		}
@@ -291,7 +291,7 @@ describe("extension session", () => {
 	it("keeps active Sidebar snapshot failures visible", async () => {
 		const h = harness();
 		await start(h);
-		h.ctx.sessionManager.getBranch.mockImplementation(() => {
+		h.ctx.sessionManager.getSessionName.mockImplementation(() => {
 			throw new Error("snapshot read failed");
 		});
 
@@ -333,7 +333,7 @@ describe("extension session", () => {
 		expect(staleSidebar).not.toContain("Test session");
 		expect(staleSidebar).not.toContain("Retired TODO");
 		expect(staleSidebar).not.toContain("retired extension failed");
-		expect(staleSidebar).not.toContain("TODOS");
+		expect(staleSidebar).not.toContain("Todos");
 		expect(oldSessionManager.getBranch).not.toHaveBeenCalled();
 		expect(oldSessionManager.getSessionName).not.toHaveBeenCalled();
 		expect(oldSessionManager.getSessionFile).not.toHaveBeenCalled();
@@ -477,7 +477,7 @@ describe("extension session", () => {
 		expect(replacementSidebar).toContain("Post-shutdown session");
 		expect(replacementSidebar).not.toContain("Shutdown stale TODO");
 		expect(replacementSidebar).not.toContain("shutdown-stale.ts");
-		expect(replacementSidebar).not.toContain("TODOS");
+		expect(replacementSidebar).not.toContain("Todos");
 	});
 
 	it("does not retain published state when initialization fails", async () => {
@@ -560,7 +560,7 @@ describe("extension session", () => {
 		const recoveredSidebar = renderOverlayText(h, h.overlays.length - 1);
 		expect(recoveredSidebar).toContain("Recovered session");
 		expect(recoveredSidebar).not.toContain("Failure stale TODO");
-		expect(recoveredSidebar).not.toContain("TODOS");
+		expect(recoveredSidebar).not.toContain("Todos");
 	});
 
 	it("cancels pending system notifications during shutdown", async () => {
@@ -608,8 +608,8 @@ describe("extension session", () => {
 		await inspected;
 		await settleMicrotasks();
 		// Positive control: a published pulse does reach the sidebar.
-		expect(renderOverlayText(active)).toContain("stale-branch");
-		expect(renderOverlayText(active)).toContain("1 file");
+		expect(renderOverlayText(active)).toMatch(/tracked\.txt\s+\+5\s+−2/);
+		expect(renderOverlayText(active)).toMatch(/untracked\.txt\s+new/);
 		await active.dispatch("session_shutdown", { reason: "quit" }, active.ctx);
 		expect(active.overlays[0]?.done).toHaveBeenCalledOnce();
 
@@ -848,8 +848,7 @@ describe("extension session", () => {
 		expect(h.overlays[0]?.done).toHaveBeenCalledOnce();
 		await command(h, "sidebar on");
 		const replacementText = renderOverlayText(h, 1, 44);
-		expect(replacementText).toContain("ACTIVITY");
-		expect(replacementText).toMatch(/First token\s+—/);
+		expect(replacementText).toContain("Ready");
 		expect(replacementText).not.toContain("old.ts");
 
 		const replacementRenderCount = h.overlays[1]?.requestRender.mock.calls.length ?? 0;
@@ -900,7 +899,6 @@ describe("extension session", () => {
 			const activeRenderCount = h.overlays[1]?.requestRender.mock.calls.length ?? 0;
 			const activeText = renderOverlayText(h, 1, 44);
 			expect(activeText).toContain("Replacement session");
-			expect(activeText).toContain("ACTIVITY");
 			expect(activeText).toContain("Turn 7");
 			expect(activeText).toContain("◐ bash");
 			expect(activeText).toContain("bash");
@@ -939,7 +937,7 @@ describe("extension session", () => {
 
 			expect(h.overlays[1]?.requestRender.mock.calls.length).toBeGreaterThan(activeRenderCount);
 			const settledText = renderOverlayText(h, 1, 44);
-			expect(settledText).toMatch(/Last run\s+<1s/);
+			expect(settledText).toContain("last run <1s");
 			expect(settledText).not.toContain("Turn 7");
 			expect(settledText).not.toContain("settled");
 			expect(settledText).toContain("✓ bash");

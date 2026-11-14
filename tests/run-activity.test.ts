@@ -426,19 +426,16 @@ describe("summarizeTool", () => {
 	});
 
 	it("shortens project-relative and home-relative paths", () => {
-		const priorHome = process.env.HOME;
-		process.env.HOME = "/Users/alice";
+		// os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
+		vi.stubEnv("HOME", "/Users/alice");
+		vi.stubEnv("USERPROFILE", "/Users/alice");
 		try {
 			expect(summarizeTool("read", { path: "/repo/src/state.ts" }, "/repo")).toBe("src/state.ts");
 			expect(summarizeTool("read", { path: "/Users/alice/.pi/config.json" }, "/repo")).toBe(
 				"~/.pi/config.json",
 			);
 		} finally {
-			if (priorHome === undefined) {
-				delete process.env.HOME;
-			} else {
-				process.env.HOME = priorHome;
-			}
+			vi.unstubAllEnvs();
 		}
 	});
 

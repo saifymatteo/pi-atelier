@@ -11,6 +11,8 @@ export type ActivityState = "ready" | "working" | "error";
 export type SegmentId = (typeof PRODUCT_SEGMENT_ORDER)[number];
 export type Density = (typeof DENSITIES)[number];
 export type BuiltinSidebarPanelId = (typeof BUILTIN_SIDEBAR_PANEL_IDS)[number];
+/** Framed panels with state-lit borders, or frameless headings for a quieter Sidebar. */
+export type SidebarStyle = "framed" | "minimal";
 /** Stable namespaced IDs are used by contributed panels. */
 export type ContributedSidebarPanelId = `${string}:${string}`;
 /** Configuration may retain built-ins and unavailable contributed panels. */
@@ -76,6 +78,7 @@ export interface DisplayValue {
 export interface AtelierConfig extends DisplaySettings {
 	nerdFont: boolean;
 	shortcut: string;
+	resizeShortcut: string;
 	/** Optional key that toggles the sidebar directly; empty means no binding. */
 	toggleShortcut: string;
 	contextWarning: number;
@@ -85,6 +88,7 @@ export interface AtelierConfig extends DisplaySettings {
 	showSidebarOnStartup: boolean;
 	/** Sidebar width in columns when a session starts. */
 	sidebarWidth: number;
+	sidebarStyle: SidebarStyle;
 	sidebarPanelLayout: SidebarPanelLayout;
 	extensionStatusOrder: string[];
 	completionNotifications: boolean;

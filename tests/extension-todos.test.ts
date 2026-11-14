@@ -103,7 +103,7 @@ describe("sidebar todos integration", () => {
 				],
 				nextId: 3,
 			},
-			progress: "1/2",
+			progress: "1 of 2",
 			texts: ["Completed task", "Pending task"],
 		},
 		{
@@ -116,7 +116,7 @@ describe("sidebar todos integration", () => {
 				],
 				nextId: 4,
 			},
-			progress: "1/3",
+			progress: "1 of 3",
 			texts: ["Done", "Working", "Pending"],
 		},
 	])("shows TODOS panel reconstructed from $name branch entries", async ({ details, progress, texts }) => {
@@ -126,7 +126,7 @@ describe("sidebar todos integration", () => {
 		await command(h, "sidebar on");
 
 		const sidebarText = renderOverlayText(h);
-		expect(sidebarText).toContain("TODOS");
+		expect(sidebarText).toContain("Todos");
 		expect(sidebarText).toContain(progress);
 		for (const text of texts) expect(sidebarText).toContain(text);
 	});
@@ -170,7 +170,7 @@ describe("sidebar todos integration", () => {
 		await sessionTreeHandler({ type: "session_tree", newLeafId: null, oldLeafId: "second" }, h.ctx);
 		sidebarText = sidebarOverlay.component.render(44).join("\n");
 		expect(sidebarText).not.toContain("Second branch task");
-		expect(sidebarText).not.toContain("TODOS");
+		expect(sidebarText).not.toContain("Todos");
 	});
 
 	it("filters out tasks with unknown statuses from sidebar", async () => {
@@ -189,8 +189,8 @@ describe("sidebar todos integration", () => {
 		await command(h, "sidebar on");
 
 		const sidebarText = renderOverlayText(h, 0, 44);
-		expect(sidebarText).toContain("TODOS");
-		expect(sidebarText).toContain("0/1");
+		expect(sidebarText).toContain("Todos");
+		expect(sidebarText).toContain("0 of 1");
 		expect(sidebarText).toContain("Valid");
 		expect(sidebarText).not.toContain("Deleted");
 		expect(sidebarText).not.toContain("Unknown");
@@ -208,7 +208,7 @@ describe("sidebar todos integration", () => {
 		await command(h, "sidebar on");
 
 		let sidebarText = renderOverlayText(h, 0, 44);
-		expect(sidebarText).toContain("0/1");
+		expect(sidebarText).toContain("0 of 1");
 		expect(sidebarText).toContain("Initial task");
 
 		// Trigger new todo result
@@ -228,7 +228,7 @@ describe("sidebar todos integration", () => {
 		);
 
 		sidebarText = renderOverlayText(h, 0, 44);
-		expect(sidebarText).toContain("1/2");
+		expect(sidebarText).toContain("1 of 2");
 		expect(sidebarText).toContain("Initial task");
 		expect(sidebarText).toContain("New task");
 	});
@@ -279,7 +279,7 @@ describe("sidebar todos integration", () => {
 		await command(h, "sidebar on");
 		const sidebarText = renderOverlayText(h, h.overlays.length - 1, 44);
 		expect(sidebarText).not.toContain("Stale task");
-		expect(sidebarText).not.toContain("TODOS");
+		expect(sidebarText).not.toContain("Todos");
 	});
 
 	it("persists hidden Agent independently from populated TODOS across session reload", async () => {
@@ -297,17 +297,17 @@ describe("sidebar todos integration", () => {
 
 			await start(h);
 			const initialSidebar = renderOverlayText(h, 0, 44);
-			expect(initialSidebar).not.toContain("AGENT");
-			expect(initialSidebar).toContain("TODOS");
-			expect(initialSidebar).toContain("1/2");
+			expect(initialSidebar).not.toContain("Agent");
+			expect(initialSidebar).toContain("Todos");
+			expect(initialSidebar).toContain("1 of 2");
 			expect(initialSidebar).toContain("Visible TODO");
 
 			await start(h, replacementContext(h.ctx, "Reloaded session"));
 			expect(h.overlays[0]?.done).toHaveBeenCalledOnce();
 			const reloadedSidebar = renderOverlayText(h, 1, 44);
-			expect(reloadedSidebar).not.toContain("AGENT");
-			expect(reloadedSidebar).toContain("TODOS");
-			expect(reloadedSidebar).toContain("1/2");
+			expect(reloadedSidebar).not.toContain("Agent");
+			expect(reloadedSidebar).toContain("Todos");
+			expect(reloadedSidebar).toContain("1 of 2");
 			expect(reloadedSidebar).toContain("Visible TODO");
 		});
 	});
@@ -322,7 +322,7 @@ describe("sidebar todos integration", () => {
 			await command(h, "sidebar on");
 
 			const sidebarText = renderOverlayText(h, 0, 44);
-			expect(sidebarText).not.toContain("TODOS");
+			expect(sidebarText).not.toContain("Todos");
 
 			const toolResultHandler = h.handler("tool_result");
 			const result = await toolResultHandler(
