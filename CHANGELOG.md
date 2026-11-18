@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Give footer extension statuses distinct colors in display order: pink, green, gold, orange, purple, and cyan, repeating after six statuses. Keep dedicated rows, dim separators, wrapping, truncation, and `NO_COLOR` behavior.
+
 ## 0.20.1 — 2026-11-14
 
 - Merge upstream v0.20.0 and the framed panel title-casing fix through `a799be1`, including the focused Sidebar, Framed/Minimal styles, per-file change counts, configurable resize shortcut, Plain text default, and development dependency security fix.

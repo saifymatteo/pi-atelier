@@ -15,6 +15,14 @@ import type {
 
 const WORKING_DOT_FRAMES = ["...", "..", "."] as const;
 const WORKING_ANIMATION_INTERVAL_MS = 400;
+const STATUS_ROLES: readonly PaletteRole[] = [
+	"chartPink",
+	"chartGreen",
+	"chartGold",
+	"working",
+	"accent",
+	"cache",
+];
 
 // Nerd Font glyphs, matching the icon vocabulary used by shell prompts.
 const FOOTER_ICONS = {
@@ -410,8 +418,8 @@ function statusRows(
 ): string[] {
 	const rows: string[] = [];
 	let current = "";
-	for (const part of parts) {
-		const painted = palette.paint("muted", part);
+	for (const [index, part] of parts.entries()) {
+		const painted = palette.paint(STATUS_ROLES[index % STATUS_ROLES.length]!, part);
 		const candidate = current ? `${current}${palette.paint("dim", ` ${separator} `)}${painted}` : painted;
 		if (visibleWidth(candidate) <= width) {
 			current = candidate;

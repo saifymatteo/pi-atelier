@@ -18,6 +18,10 @@ Published to npm as [`@saifymatteo/pi-atelier`](https://www.npmjs.com/package/@s
 
 Upstream renders custom-extension statuses inline in the Status Rail and drops or compacts the rail when they grow. This fork renders them on dedicated rows beneath the rail: statuses wrap as whole items onto further rows, adjacent statuses in a row are separated by the rail's dim separator, and an over-wide status truncates with an ellipsis instead of forcing the rail to compact. Applies to both footer modes.
 
+### Automatic extension status colors
+
+Extension statuses cycle through pink, green, gold, orange, purple, and cyan in display order, repeating after six statuses. Colors follow the configured status order, continue across wrapped rows, and can shift when a status is added or removed. Separators stay dim; `NO_COLOR` disables these status colors.
+
 ### Configurable extension status ordering
 
 `extensionStatusOrder` orders individual custom-extension statuses by their exact `setStatus()` keys. Listed statuses come first; unlisted statuses keep Pi's order. Trusted project configuration can override the user list.
