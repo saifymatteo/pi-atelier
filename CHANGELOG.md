@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.20.2 — 2026-11-18
 
 - Give footer extension statuses distinct colors in display order: pink, green, gold, orange, purple, and cyan, repeating after six statuses. Keep dedicated rows, dim separators, wrapping, truncation, and `NO_COLOR` behavior.
 
